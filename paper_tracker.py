@@ -106,6 +106,7 @@ class Paper:
     date: str = ""
     arxiv_url: str = ""
     chatpaper_url: str = ""
+    pdf_url: str = ""
     project_url: str = ""
     abstract: str = ""
     summary: str = ""
@@ -158,15 +159,20 @@ class ChatPaperSearcher:
         logger.info("🌐 浏览器已关闭")
 
     def search_keyword(self, keyword: str) -> List[dict]:
-        """在 ChatPaper 搜索一个关键词，返回论文列表"""
+        """在 ChatPaper 搜索一个关键词，智能翻页"""
         from selenium.webdriver.common.by import By
 
         logger.info(f"🔍 ChatPaper 搜索: {keyword}")
+        all_matched = []
+        # days_lookback=1 表示只看今天，=2 表示今天和昨天
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        cutoff = today - timedelta(days=CONFIG["days_lookback"] - 1)
+        logger.info(f"  📅 只看 {cutoff.strftime('%Y-%m-%d')} 及之后的论文")
+
         try:
             self.driver.get(CONFIG["chatpaper_url"])
-            time.sleep(4)
+            time.sleep(5)
 
-            # 用 JavaScript 输入关键词并搜索（直接交互会报错）
             self.driver.execute_script("""
                 var input = document.querySelector('input[placeholder*="english"]')
                            || document.querySelector('input[placeholder*="keyword"]')
@@ -179,101 +185,140 @@ class ChatPaperSearcher:
             """, keyword)
             time.sleep(1)
 
-            # 点击 search 按钮
             self.driver.execute_script("""
                 var btns = document.querySelectorAll('button, span, div, a');
                 for (var b of btns) {
-                    if (b.textContent.trim() === 'search') {
-                        b.click();
-                        break;
-                    }
+                    if (b.textContent.trim() === 'search') { b.click(); break; }
                 }
             """)
+            time.sleep(6)
+
+            # 直接通过 URL 参数排序，不依赖点击按钮
+            current_url = self.driver.current_url
+            if "sort=" not in current_url:
+                sep = "&" if "?" in current_url else "?"
+                sorted_url = f"{current_url}{sep}sort=date"
+            else:
+                sorted_url = re.sub(r'sort=\w+', 'sort=date', current_url)
+            self.driver.get(sorted_url)
+            logger.info("  📅 已切换排序: Published Date (URL)")
             time.sleep(5)
 
-            # 点击 Published Date 排序
-            self.driver.execute_script("""
-                var els = document.querySelectorAll('*');
-                for (var e of els) {
-                    if (e.textContent.trim() === 'Published Date' && e.children.length === 0) {
-                        e.click();
-                        break;
-                    }
-                }
-            """)
-            logger.info("  📅 已切换排序: Published Date")
-            time.sleep(4)
+            base_url = self.driver.current_url
 
-            # 解析页面文本提取论文
-            body_text = self.driver.find_element(By.TAG_NAME, "body").text
-            papers = self._parse_papers(body_text)
-            logger.info(f"  找到 {len(papers)} 篇论文")
+            for page in range(1, 20):  # 最多20页
+                if page > 1:
+                    sep = "&" if "?" in base_url else "?"
+                    page_url = re.sub(r'page=\d+', f'page={page}', base_url) if "page=" in base_url else f"{base_url}{sep}page={page}"
+                    self.driver.get(page_url)
+                    time.sleep(5)
 
-            # 提取链接
-            links = self.driver.find_elements(By.CSS_SELECTOR, "a[href*='/paper/']")
-            link_map = {}
-            for a in links:
-                href = a.get_attribute("href") or ""
-                text = a.text.strip()
-                if href and text:
-                    link_map[text[:30]] = href
+                body_text = self.driver.find_element(By.TAG_NAME, "body").text
+                page_papers = self._parse_papers_no_date_filter(body_text)
 
-            for p in papers:
-                for key, url in link_map.items():
-                    if key in p.get("title_en", "") or key in p.get("title_zh", ""):
-                        p["chatpaper_url"] = url
-                        break
+                if not page_papers:
+                    break
 
-            return papers
+                # 这一页有多少篇符合日期
+                matched_this_page = 0
+                dated_this_page = 0
+                cutoff_date = cutoff.date()
+                for p in page_papers:
+                    if not p.get("date"):
+                        continue
+                    dated_this_page += 1
+                    try:
+                        paper_date = datetime.strptime(p["date"], "%Y-%m-%d").date()
+                        if paper_date >= cutoff_date:
+                            self._extract_links_for_papers([p])
+                            all_matched.append(p)
+                            matched_this_page += 1
+                    except ValueError:
+                        continue
+
+                logger.info(f"  📄 第{page}页: {dated_this_page} 篇有日期, 符合 {matched_this_page} 篇, 累计 {len(all_matched)} 篇")
+
+                if dated_this_page == 0:
+                    break
+
+                # 本页全部符合 → 继续翻，本页出现旧论文 → 停止
+                if matched_this_page < dated_this_page:
+                    if matched_this_page > 0:
+                        logger.info(f"  📅 本页已出现旧论文，停止翻页")
+                    else:
+                        logger.info(f"  📅 本页无符合日期的论文，停止翻页")
+                    break
+
+                time.sleep(2)
+
+            # 最后统一提取链接
+            self._extract_links_for_papers(all_matched)
+
+            logger.info(f"  ✅ 共找到 {len(all_matched)} 篇")
+            return all_matched
 
         except Exception as e:
             logger.error(f"  搜索失败 [{keyword}]: {e}")
-            return []
+            return all_matched
 
-    def _parse_papers(self, text: str) -> List[dict]:
-        """
-        解析页面文本，ChatPaper 格式如下：
-        1.中文标题
-        AI Chat
-        English Title
-        cs.AI
-        06 Mar 2025
-        Institution;
-        """
+    def _extract_links_for_papers(self, papers):
+        """从当前页面提取论文链接"""
+        from selenium.webdriver.common.by import By
+        try:
+            links = self.driver.find_elements(By.CSS_SELECTOR, "a[href*='/paper/']")
+            for a in links:
+                try:
+                    href = a.get_attribute("href") or ""
+                    text = a.text.strip()
+                    if href and text:
+                        for p in papers:
+                            if not p.get("chatpaper_url") and (text[:20] in p.get("title_en", "") or text[:20] in p.get("title_zh", "")):
+                                p["chatpaper_url"] = href
+                                break
+                except:
+                    continue
+        except:
+            pass
+
+    def _parse_papers_no_date_filter(self, text: str) -> List[dict]:
+        """解析页面文本，不做日期过滤"""
         papers = []
-        cutoff = datetime.now() - timedelta(days=CONFIG["days_lookback"])
-
-        # 按编号分割论文
         chunks = re.split(r'\n\d+\.', text)
 
-        for chunk in chunks[1:]:  # 跳过第一个（搜索框之前的内容）
+        for chunk in chunks[1:]:
             lines = [l.strip() for l in chunk.split("\n") if l.strip()]
-            if len(lines) < 3:
+            if len(lines) < 2:
                 continue
 
-            title_zh = ""
-            title_en = ""
-            date_str = ""
+            title_zh, title_en, date_str, institution = "", "", "", ""
             categories = []
-            institution = ""
+
+            # 先在整个 chunk 里找日期（不要求独占一行）
+            date_match = re.search(r'(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4})', chunk)
+            if date_match:
+                try:
+                    date_str = datetime.strptime(date_match.group(1), "%d %b %Y").strftime("%Y-%m-%d")
+                except ValueError:
+                    date_str = ""
+
+            # 在整个 chunk 里找分类
+            categories = re.findall(r'cs\.\w+', chunk)
 
             for line in lines:
-                if line in ("AI Chat", "search", "track", "Sort by:", "Relevance", "Published Date"):
+                if line in ("AI Chat", "search", "track", "Sort by:", "Relevance", "Published Date", "PDF"):
                     continue
 
-                # 日期：DD Mon YYYY
-                date_match = re.match(r"^(\d{1,2}\s+\w{3}\s+\d{4})$", line)
-                if date_match:
-                    date_str = date_match.group(1)
+                # 跳过日期行（已经提取过了）
+                if re.search(r'\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}', line):
                     continue
 
-                # 分类：cs.XX
-                if re.match(r"^(cs\.\w+\s*)+$", line):
-                    categories = re.findall(r"cs\.\w+", line)
+                # 跳过纯分类行
+                clean = re.sub(r'cs\.\w+', '', line).strip()
+                if not clean:
                     continue
 
-                # 会议标签：如 CVPR 2025, ACL 2024, ICLR 2026
-                if re.match(r"^[A-Z]{2,10}\s+\d{4}$", line):
+                # 会议标签
+                if re.match(r'^[A-Z]{2,10}\s+\d{4}$', line.strip()):
                     continue
 
                 # 机构
@@ -282,23 +327,18 @@ class ChatPaperSearcher:
                     continue
 
                 # 标题
-                if re.search(r"[\u4e00-\u9fff]", line) and not title_zh:
+                if re.search(r'[\u4e00-\u9fff]', line) and not title_zh:
                     title_zh = line
-                elif re.search(r"[a-zA-Z]", line) and len(line) > 10 and not title_en:
+                elif re.search(r'[a-zA-Z]', line) and len(line) > 10 and not title_en:
                     title_en = line
 
             if not title_en and not title_zh:
                 continue
 
-            # 日期过滤
-            if date_str:
-                try:
-                    pub_date = datetime.strptime(date_str, "%d %b %Y")
-                    if pub_date < cutoff:
-                        continue
-                    date_str = pub_date.strftime("%Y-%m-%d")
-                except ValueError:
-                    pass
+            # 跳过误识别的非论文内容
+            skip_words = ["Sort by", "Relevance", "Published Date", "All Papers", "search", "track"]
+            if any(sw in (title_en or title_zh) for sw in skip_words):
+                continue
 
             papers.append({
                 "title_zh": title_zh,
@@ -307,34 +347,91 @@ class ChatPaperSearcher:
                 "categories": categories,
                 "institution": institution,
                 "chatpaper_url": "",
+                "pdf_url": "",
             })
 
         return papers
 
-    def check_keywords_on_page(self, url: str) -> int:
-        """打开论文详情页，统计关键词次数（不下载 PDF）"""
+    # _parse_papers 已被 _parse_papers_no_date_filter 替代
+
+    def check_keywords_on_page(self, paper_dict_or_url) -> int:
+        """
+        打开论文的 PDF 页面（或详情页），在页面文本中统计关键词。
+        类似 Ctrl+F 搜索整篇论文。
+        """
         from selenium.webdriver.common.by import By
+
+        # 支持传入 Paper 对象或 URL 字符串
+        if isinstance(paper_dict_or_url, str):
+            url = paper_dict_or_url
+            pdf_url = ""
+        else:
+            url = paper_dict_or_url
+            pdf_url = ""
 
         if not url:
             return 0
+
         try:
             self.driver.execute_script("window.open('');")
             self.driver.switch_to.window(self.driver.window_handles[-1])
             self.driver.get(url)
-            time.sleep(4)
+
+            # 等待页面完全加载（解决网络延迟问题）
+            for _ in range(15):
+                time.sleep(2)
+                state = self.driver.execute_script("return document.readyState")
+                if state == "complete":
+                    break
+            time.sleep(3)  # 额外等待动态内容
 
             page_text = self.driver.find_element(By.TAG_NAME, "body").text.lower()
 
+            # 如果详情页文本太少，尝试找 PDF 链接并打开
+            if len(page_text) < 500:
+                logger.debug("  详情页内容较少，尝试查找 PDF...")
+
+            # 尝试在详情页找到 arXiv PDF 链接
+            try:
+                pdf_links = self.driver.find_elements(By.CSS_SELECTOR, 'a[href*="arxiv.org/pdf"]')
+                if not pdf_links:
+                    pdf_links = self.driver.find_elements(By.CSS_SELECTOR, 'a[href*="arxiv.org/abs"]')
+                if pdf_links:
+                    pdf_href = pdf_links[0].get_attribute("href")
+                    # 转换为 PDF 链接
+                    if "/abs/" in pdf_href:
+                        pdf_href = pdf_href.replace("/abs/", "/pdf/")
+                    if pdf_href and pdf_href != url:
+                        logger.debug(f"  打开 PDF: {pdf_href}")
+                        self.driver.get(pdf_href)
+                        # PDF 加载需要更多时间
+                        for _ in range(20):
+                            time.sleep(2)
+                            state = self.driver.execute_script("return document.readyState")
+                            if state == "complete":
+                                break
+                        time.sleep(5)
+                        # 获取 PDF 页面文本
+                        pdf_text = self.driver.find_element(By.TAG_NAME, "body").text.lower()
+                        if len(pdf_text) > len(page_text):
+                            page_text = pdf_text
+            except Exception as e:
+                logger.debug(f"  PDF 打开失败，使用详情页文本: {e}")
+
+            # 统计关键词
             total = 0
             for kw in CONFIG["page_check_keywords"]:
-                total += page_text.count(kw.lower())
+                count = page_text.count(kw.lower())
+                if count > 0:
+                    logger.debug(f"    '{kw}' × {count}")
+                total += count
 
             self.driver.close()
             self.driver.switch_to.window(self.driver.window_handles[0])
             return total
 
         except Exception as e:
-            logger.error(f"  详情页失败: {e}")
+            logger.error(f"  页面访问失败: {e}")
             try:
                 if len(self.driver.window_handles) > 1:
                     self.driver.close()
@@ -386,7 +483,7 @@ class ChatPaperSearcher:
         return info
 
     def search_all_keywords(self) -> List[Paper]:
-        """搜索所有关键词 → 合并去重 → 逐篇检查"""
+        """搜索所有关键词 → 合并去重 → 逐篇在 PDF 中检查关键词"""
         all_papers = {}
 
         self.start_browser()
@@ -403,18 +500,21 @@ class ChatPaperSearcher:
                         categories=r.get("categories", []),
                         institution=r.get("institution", ""),
                         chatpaper_url=r.get("chatpaper_url", ""),
+                        pdf_url=r.get("pdf_url", ""),
                     )
                 time.sleep(2)
 
             logger.info(f"📊 去重后共 {len(all_papers)} 篇")
 
             papers = list(all_papers.values())
-            for p in papers:
-                if not p.chatpaper_url:
+            for i, p in enumerate(papers):
+                # 优先用 ChatPaper 详情页检查，会自动尝试找 PDF 链接
+                check_url = p.chatpaper_url or p.pdf_url
+                if not check_url:
                     continue
-                logger.info(f"🔎 检查: {(p.title_en or p.title_zh)[:50]}...")
-                p.keyword_count = self.check_keywords_on_page(p.chatpaper_url)
-                logger.info(f"   页面关键词 × {p.keyword_count}")
+                logger.info(f"🔎 [{i+1}/{len(papers)}] 检查: {(p.title_en or p.title_zh)[:50]}...")
+                p.keyword_count = self.check_keywords_on_page(check_url)
+                logger.info(f"   关键词 × {p.keyword_count}")
 
                 if p.keyword_count >= CONFIG["keyword_threshold"]:
                     d = self.extract_details(p.chatpaper_url)
