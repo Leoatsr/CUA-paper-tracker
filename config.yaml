@@ -1,0 +1,37 @@
+# ============================================================
+# Paper Tracker 配置文件
+# 数据源: https://chatpaper.com/zh-CN（不使用 arXiv API）
+# ============================================================
+
+# 在 ChatPaper 搜索框中依次搜索的关键词
+search_keywords:
+  - "GUI Agent"
+  - "CUA"
+  - "Web Agent"
+  - "mobile agent"
+  - "computer use"
+
+# 在论文详情页上统计出现次数的关键词（不下载 PDF，直接在网页上检索）
+page_check_keywords:
+  - "web agent"
+  - "gui agent"
+  - "computer use"
+  - "mobile agent"
+  - "CUA"
+
+# 关键词出现次数阈值（≥ 此值则录入飞书）
+keyword_threshold: 2
+
+# 查看最近 N 天的论文
+days_lookback: 1
+
+# 浏览器设置
+headless: true
+slow_mo: 300
+page_timeout: 30000
+
+# 日志文件
+log_file: "paper_tracker.log"
+
+# 已处理论文记录
+processed_file: "processed_papers.json"

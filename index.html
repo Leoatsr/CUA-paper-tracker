@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Paper Tracker — 论文自动追踪与飞书录入</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#06080c;--surface:#0d1117;--surface2:#161b22;--border:#21262d;--border2:#30363d;
+    --text:#e6edf3;--text2:#8b949e;--text3:#484f58;
+    --blue:#58a6ff;--blue-bg:rgba(56,139,253,.1);--green:#3fb950;--green-bg:rgba(46,160,67,.1);
+    --purple:#bc8cff;--purple-bg:rgba(188,140,255,.1);--orange:#f0883e;--red:#f85149;
+    --mono:'JetBrains Mono',monospace;--sans:'Noto Sans SC',-apple-system,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.7;-webkit-font-smoothing:antialiased}
+
+  .hero{position:relative;padding:80px 24px 60px;text-align:center;overflow:hidden;border-bottom:1px solid var(--border)}
+  .hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 600px 400px at 30% 20%,rgba(56,139,253,.08),transparent),radial-gradient(ellipse 500px 350px at 70% 60%,rgba(188,140,255,.06),transparent);pointer-events:none}
+  .hero h1{font-size:42px;font-weight:900;letter-spacing:-.03em;margin-bottom:12px;position:relative}
+  .hero h1 .gradient{background:linear-gradient(135deg,var(--blue),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .hero .tagline{font-size:17px;color:var(--text2);max-width:640px;margin:0 auto 32px;font-weight:300}
+  .badges{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-bottom:36px}
+  .badge{display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:14px;font-size:12px;font-weight:500;font-family:var(--mono)}
+  .badge.blue{background:var(--blue-bg);color:var(--blue);border:1px solid rgba(56,139,253,.2)}
+  .badge.green{background:var(--green-bg);color:var(--green);border:1px solid rgba(46,160,67,.2)}
+  .badge.purple{background:var(--purple-bg);color:var(--purple);border:1px solid rgba(188,140,255,.2)}
+  .hero-actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:12px 28px;border-radius:10px;font-size:15px;font-weight:600;text-decoration:none;cursor:pointer;border:none;transition:all .2s;font-family:var(--sans)}
+  .btn-primary{background:linear-gradient(135deg,#238636,#2ea043);color:#fff}
+  .btn-primary:hover{filter:brightness(1.15);transform:translateY(-1px)}
+  .btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+  .btn-secondary:hover{border-color:var(--text3)}
+
+  .container{max-width:880px;margin:0 auto;padding:0 24px}
+
+  .pipeline{padding:60px 24px;border-bottom:1px solid var(--border)}
+  .pipeline-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;max-width:880px;margin:0 auto;background:var(--border);border-radius:12px;overflow:hidden}
+  .pipe-step{background:var(--surface);padding:28px 20px;text-align:center;position:relative}
+  .pipe-step::after{content:'→';position:absolute;right:-8px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:18px;z-index:1}
+  .pipe-step:last-child::after{display:none}
+  .pipe-icon{font-size:28px;margin-bottom:10px}
+  .pipe-title{font-size:14px;font-weight:700;margin-bottom:4px}
+  .pipe-desc{font-size:12px;color:var(--text2)}
+
+  .section{padding:56px 24px;border-bottom:1px solid var(--border)}
+  .section-title{font-size:24px;font-weight:700;margin-bottom:8px;letter-spacing:-.02em;display:flex;align-items:center;gap:10px}
+  .section-subtitle{font-size:14px;color:var(--text2);margin-bottom:28px}
+
+  .code-block{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px}
+  .code-header{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--surface2);border-bottom:1px solid var(--border)}
+  .code-filename{font-family:var(--mono);font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px}
+  .code-copy{background:none;border:1px solid var(--border);color:var(--text2);padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:var(--mono);transition:all .15s}
+  .code-copy:hover{border-color:var(--text3);color:var(--text)}
+  .code-copy.copied{border-color:var(--green);color:var(--green)}
+  pre{padding:16px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.6;color:var(--text)}
+
+  .tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:24px}
+  .tab{padding:10px 20px;font-size:13px;font-weight:500;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;font-family:var(--sans);transition:all .15s}
+  .tab:hover{color:var(--text)}
+  .tab.active{color:var(--text);border-bottom-color:var(--blue);font-weight:600}
+  .tab-content{display:none}
+  .tab-content.active{display:block}
+
+  .file-tree{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px 24px;font-family:var(--mono);font-size:13px;line-height:2}
+  .file-tree .dir{color:var(--blue)}
+  .file-tree .file{color:var(--text2)}
+  .file-tree .indent{padding-left:20px}
+  .file-tree .indent2{padding-left:40px}
+
+  .card-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px}
+  .card-title{font-size:14px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+  .card-body{font-size:13px;color:var(--text2);line-height:1.6}
+  .tag-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .tag{padding:4px 12px;border-radius:14px;font-size:12px;font-weight:500;font-family:var(--mono)}
+  .tag.blue{background:var(--blue-bg);color:var(--blue);border:1px solid rgba(56,139,253,.2)}
+  .tag.purple{background:var(--purple-bg);color:var(--purple);border:1px solid rgba(188,140,255,.2)}
+
+  .fields-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .field-item{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:13px}
+  .field-icon{opacity:.5;font-size:14px}
+
+  .setup-step{display:flex;gap:16px;margin-bottom:28px}
+  .step-num{flex-shrink:0;width:32px;height:32px;background:var(--blue-bg);color:var(--blue);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;margin-top:2px}
+  .step-content{flex:1}
+  .step-title{font-size:16px;font-weight:600;margin-bottom:6px}
+  .step-desc{font-size:13px;color:var(--text2);margin-bottom:12px}
+
+  .log-demo{background:#010409;border:1px solid var(--border);border-radius:10px;padding:20px;font-family:var(--mono);font-size:12px;line-height:1.9;overflow-x:auto}
+  .log-demo .ts{color:var(--text3)}
+  .log-demo .info{color:var(--blue)}
+  .log-demo .ok{color:var(--green)}
+  .log-demo .err{color:var(--red)}
+
+  .highlight-box{background:var(--green-bg);border:1px solid rgba(46,160,67,.25);border-radius:10px;padding:16px 20px;margin:20px 0;font-size:13px;color:var(--green);display:flex;align-items:center;gap:10px}
+
+  .footer{padding:40px 24px;text-align:center;color:var(--text3);font-size:13px}
+  .footer a{color:var(--blue);text-decoration:none}
+
+  @media(max-width:700px){
+    .hero h1{font-size:28px}
+    .pipeline-grid{grid-template-columns:1fr 1fr}
+    .pipe-step:nth-child(2)::after,.pipe-step:nth-child(4)::after{display:none}
+    .card-grid{grid-template-columns:1fr}
+    .fields-grid{grid-template-columns:1fr 1fr}
+    .hero-actions{flex-direction:column;align-items:center}
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══ HERO ═══ -->
+<section class="hero">
+  <h1>📄 <span class="gradient">Paper Tracker</span></h1>
+  <p class="tagline">每天自动从 <strong>chatpaper.com</strong> 搜索最新论文，在详情页上检查关键词频率（不下载 PDF），将符合条件的论文自动录入飞书 Wiki</p>
+  <div class="badges">
+    <span class="badge blue">Python 3.8+ · Playwright</span>
+    <span class="badge green">MIT License</span>
+    <span class="badge purple">⏰ 每天 9:00 自动执行</span>
+  </div>
+  <div class="hero-actions">
+    <a class="btn btn-primary" href="#setup">🚀 快速开始</a>
+    <a class="btn btn-secondary" href="#code">📝 查看代码</a>
+    <a class="btn btn-secondary" href="#push">🐙 推送 GitHub</a>
+  </div>
+</section>
+
+<!-- ═══ PIPELINE ═══ -->
+<section class="pipeline">
+  <div class="pipeline-grid">
+    <div class="pipe-step">
+      <div class="pipe-icon">🔍</div>
+      <div class="pipe-title">ChatPaper 搜索</div>
+      <div class="pipe-desc">在 chatpaper.com<br>搜索多个关键词</div>
+    </div>
+    <div class="pipe-step">
+      <div class="pipe-icon">📅</div>
+      <div class="pipe-title">按日期排序</div>
+      <div class="pipe-desc">Sort by:<br>Published Date</div>
+    </div>
+    <div class="pipe-step">
+      <div class="pipe-icon">🔎</div>
+      <div class="pipe-title">页面关键词检测</div>
+      <div class="pipe-desc">在详情页网页文本中<br>统计关键词次数</div>
+    </div>
+    <div class="pipe-step">
+      <div class="pipe-icon">✅</div>
+      <div class="pipe-title">飞书录入</div>
+      <div class="pipe-desc">自动填写 Wiki<br>去重避免重复</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ FEATURES ═══ -->
+<section class="section">
+  <div class="container">
+    <div class="section-title">⚡ 功能亮点</div>
+    <div class="section-subtitle">全流程自动化，数据源 100% 来自 chatpaper.com</div>
+
+    <div class="highlight-box">
+      ✅ <strong>不下载 PDF</strong> — 直接在论文详情页的网页文本中统计关键词，速度更快、无需额外存储
+    </div>
+
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-title">🔍 ChatPaper 搜索</div>
+        <div class="card-body">
+          使用 Playwright 自动操作 chatpaper.com/zh-CN，在搜索框依次输入关键词
+          <div class="tag-list">
+            <span class="tag blue">GUI Agent</span>
+            <span class="tag blue">CUA</span>
+            <span class="tag blue">Web Agent</span>
+            <span class="tag blue">Mobile Agent</span>
+            <span class="tag blue">Computer Use</span>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">🔎 页面关键词检测</div>
+        <div class="card-body">
+          打开论文详情页，在网页文本中统计关键词出现次数（类似 Ctrl+F）
+          <div class="tag-list">
+            <span class="tag purple">web agent</span>
+            <span class="tag purple">gui agent</span>
+            <span class="tag purple">computer use</span>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">📝 飞书自动录入</div>
+        <div class="card-body">通过飞书开放平台 API 自动填写 Wiki 页面：论文、标题、机构、日期、作者、arxiv、ChatPaper 链接、概要</div>
+      </div>
+      <div class="card">
+        <div class="card-title">⏰ 定时 + 去重</div>
+        <div class="card-body">crontab 或 GitHub Actions 每天自动运行，内置去重机制，已录入论文自动跳过</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ FEISHU FIELDS ═══ -->
+<section class="section">
+  <div class="container">
+    <div class="section-title">📋 飞书 Wiki 录入字段</div>
+    <div class="section-subtitle">自动填写以下所有字段</div>
+    <div class="fields-grid">
+      <div class="field-item"><span class="field-icon">Aā</span> 论文</div>
+      <div class="field-item"><span class="field-icon">☺</span> 标题</div>
+      <div class="field-item"><span class="field-icon">≡</span> 机构</div>
+      <div class="field-item"><span class="field-icon">📅</span> 日期</div>
+      <div class="field-item"><span class="field-icon">≡</span> 作者</div>
+      <div class="field-item"><span class="field-icon">🔗</span> arxiv</div>
+      <div class="field-item"><span class="field-icon">🔗</span> Project</div>
+      <div class="field-item"><span class="field-icon">Aā</span> 概要</div>
+      <div class="field-item"><span class="field-icon">Aā</span> 简介</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ SETUP ═══ -->
+<section class="section" id="setup">
+  <div class="container">
+    <div class="section-title">🚀 快速开始</div>
+
+    <div class="setup-step">
+      <div class="step-num">1</div>
+      <div class="step-content">
+        <div class="step-title">克隆 & 安装</div>
+        <div class="code-block">
+          <div class="code-header"><span class="code-filename">Terminal</span><button class="code-copy" onclick="copyCode(this)">复制</button></div>
+          <pre><code>git clone https://github.com/YOUR_USERNAME/paper-tracker.git
+cd paper-tracker
+pip install -r requirements.txt
+playwright install chromium</code></pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="setup-step">
+      <div class="step-num">2</div>
+      <div class="step-content">
+        <div class="step-title">配置飞书凭证</div>
+        <div class="step-desc">在 <a href="https://open.feishu.cn/app" target="_blank" style="color:var(--blue)">飞书开放平台</a> 创建应用获取 App ID / Secret</div>
+        <div class="code-block">
+          <div class="code-header"><span class="code-filename">📄 .env</span><button class="code-copy" onclick="copyCode(this)">复制</button></div>
+          <pre><code>FEISHU_APP_ID=cli_xxxxxxxxxxxxxxxx
+FEISHU_APP_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+FEISHU_WIKI_TOKEN=NwzAwDKTui4kPok4W0ucJocdnch</code></pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="setup-step">
+      <div class="step-num">3</div>
+      <div class="step-content">
+        <div class="step-title">运行</div>
+        <div class="step-desc">首次建议关闭无头模式观察浏览器：在 config.yaml 设置 <code style="color:var(--orange)">headless: false</code></div>
+        <div class="code-block">
+          <div class="code-header"><span class="code-filename">Terminal</span><button class="code-copy" onclick="copyCode(this)">复制</button></div>
+          <pre><code>python paper_tracker.py</code></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ LOG ═══ -->
+<section class="section">
+  <div class="container">
+    <div class="section-title">📋 运行日志示例</div>
+    <div class="log-demo">
+      <div><span class="ts">09:00:01</span> <span class="info">[INFO]</span> 🚀 论文自动追踪开始</div>
+      <div><span class="ts">09:00:01</span> <span class="info">[INFO]</span>    数据源: https://chatpaper.com/zh-CN</div>
+      <div><span class="ts">09:00:01</span> <span class="info">[INFO]</span>    搜索: ['GUI Agent', 'CUA', 'Web Agent']</div>
+      <div><span class="ts">09:00:02</span> <span class="info">[INFO]</span> 🌐 浏览器已启动</div>
+      <div><span class="ts">09:00:04</span> <span class="info">[INFO]</span> 🔍 ChatPaper 搜索: GUI Agent</div>
+      <div><span class="ts">09:00:07</span> <span class="info">[INFO]</span>   📅 已切换排序: Published Date</div>
+      <div><span class="ts">09:00:08</span> <span class="info">[INFO]</span>   找到 12 篇论文</div>
+      <div><span class="ts">09:00:10</span> <span class="info">[INFO]</span> 🔍 ChatPaper 搜索: CUA</div>
+      <div><span class="ts">09:00:15</span> <span class="info">[INFO]</span> 📊 去重后共 18 篇</div>
+      <div><span class="ts">09:00:16</span> <span class="info">[INFO]</span> 🔎 检查: CORA: Conformal Risk-Controlled Agents...</div>
+      <div><span class="ts">09:00:18</span> <span class="ok">[INFO]</span>    页面关键词 × 8</div>
+      <div><span class="ts">09:00:19</span> <span class="info">[INFO]</span> 🔎 检查: Attention Mechanisms in Cross-Modal...</div>
+      <div><span class="ts">09:00:21</span> <span class="err">[INFO]</span>    页面关键词 × 0</div>
+      <div><span class="ts">09:00:30</span> <span class="ok">[INFO]</span>   ✅ 符合: CORA: Conformal Risk-Controlled... (×8)</div>
+      <div><span class="ts">09:00:31</span> <span class="err">[INFO]</span>   ❌ 不符: Attention Mechanisms... (×0)</div>
+      <div><span class="ts">09:00:33</span> <span class="ok">[INFO]</span>   ✅ 飞书录入成功: CORA: Conformal Risk-Controlled...</div>
+      <div><span class="ts">09:00:35</span> <span class="info">[INFO]</span> 🌐 浏览器已关闭</div>
+      <div><span class="ts">09:00:35</span> <span class="info">[INFO]</span> 🏁 完成！搜索 18 → 符合 5 → 录入 5</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ CODE ═══ -->
+<section class="section" id="code">
+  <div class="container">
+    <div class="section-title">📝 源代码</div>
+
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab(this,'code-main')">paper_tracker.py</button>
+      <button class="tab" onclick="switchTab(this,'code-config')">config.yaml</button>
+      <button class="tab" onclick="switchTab(this,'code-actions')">GitHub Actions</button>
+      <button class="tab" onclick="switchTab(this,'code-req')">requirements.txt</button>
+    </div>
+
+    <div id="code-main" class="tab-content active">
+      <div class="code-block">
+        <div class="code-header"><span class="code-filename">🐍 paper_tracker.py (核心逻辑)</span><button class="code-copy" onclick="copyCode(this)">复制</button></div>
+        <pre style="max-height:500px"><code>class ChatPaperSearcher:
+    """
+    完整工作流（全部在 chatpaper.com/zh-CN 上完成）：
+      1. 打开 chatpaper.com → 搜索框输入关键词 → 搜索
+      2. 点击 Sort by: Published Date
+      3. 遍历搜索结果
+      4. 进详情页 → 页面文本统计关键词次数（不下载 PDF）
+      5. 关键词 ≥ 阈值 → 提取信息 → 录入飞书
+    """
+
+    def search_keyword(self, keyword):
+        """在 ChatPaper 搜索一个关键词"""
+        self.page.goto("https://chatpaper.com/zh-CN")
+
+        # 找到搜索框，输入关键词
+        search_input = self._find_element([...])
+        search_input.fill(keyword)
+
+        # 点击搜索按钮
+        self._click_search()
+
+        # 切换排序为 Published Date
+        sort_btn = self._find_element(['text="Published Date"', ...])
+        sort_btn.click()
+
+        # 提取搜索结果
+        return self._extract_results()
+
+    def check_keywords_on_page(self, url):
+        """
+        打开论文详情页，在网页文本中统计关键词。
+        不下载 PDF，直接在页面上检索。
+        """
+        detail = self.context.new_page()
+        detail.goto(url, wait_until="networkidle")
+
+        # 获取页面全部文本
+        page_text = detail.inner_text("body").lower()
+
+        # 统计每个关键词出现次数
+        total = 0
+        for kw in CONFIG["page_check_keywords"]:
+            total += page_text.count(kw.lower())
+
+        detail.close()
+        return total
+
+    def search_all_keywords(self):
+        """搜索所有关键词 → 合并去重 → 逐篇检查"""
+        self.start_browser()
+        try:
+            for kw in CONFIG["search_keywords"]:
+                results = self.search_keyword(kw)
+                # 合并去重...
+
+            for paper in papers:
+                # 进详情页检查关键词（不下载 PDF）
+                paper.keyword_count = self.check_keywords_on_page(
+                    paper.chatpaper_url
+                )
+                # 符合条件的提取详细信息...
+        finally:
+            self.close_browser()
+
+# 完整代码请查看项目中的 paper_tracker.py</code></pre>
+      </div>
+    </div>
+
+    <div id="code-config" class="tab-content">
+      <div class="code-block">
+        <div class="code-header"><span class="code-filename">⚙️ config.yaml</span><button class="code-copy" onclick="copyCode(this)">复制</button></div>
+        <pre><code># 数据源: https://chatpaper.com/zh-CN
+
+# 在 ChatPaper 搜索框中依次搜索的关键词
+search_keywords:
+  - "GUI Agent"
+  - "CUA"
+  - "Web Agent"
+  - "mobile agent"
+  - "computer use"
+
+# 在论文详情页上统计出现次数的关键词（不下载 PDF）
+page_check_keywords:
+  - "web agent"
+  - "gui agent"
+  - "computer use"
+  - "mobile agent"
+  - "CUA"
+
+keyword_threshold: 2    # ≥ 此值录入飞书
+days_lookback: 1        # 最近 N 天
+
+headless: true          # 无头模式（首次调试改 false）
+slow_mo: 300            # 操作间隔(ms)</code></pre>
+      </div>
+    </div>
+
+    <div id="code-actions" class="tab-content">
+      <div class="code-block">
+        <div class="code-header"><span class="code-filename">⚙️ .github/workflows/paper_track.yml</span><button class="code-copy" onclick="copyCode(this)">复制</button></div>
+        <pre><code>name: 📄 Paper Tracker — Daily Run
+on:
+  schedule:
+    - cron: '0 1 * * *'   # UTC 01:00 = 北京 09:00
+  workflow_dispatch:
+
+jobs:
+  track-papers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11', cache: 'pip' }
+      - run: |
+          pip install -r requirements.txt
+          playwright install chromium
+          playwright install-deps chromium
+      - run: python paper_tracker.py
+        env:
+          FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
+          FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+          FEISHU_WIKI_TOKEN: ${{ secrets.FEISHU_WIKI_TOKEN }}
+      - run: |
+          git config user.email "action@github.com"
+          git config user.name "Paper Tracker Bot"
+          git add processed_papers.json || true
+          git diff --staged --quiet || git commit -m "📄 [$(date +%Y-%m-%d)]"
+          git push || true</code></pre>
+      </div>
+    </div>
+
+    <div id="code-req" class="tab-content">
+      <div class="code-block">
+        <div class="code-header"><span class="code-filename">📄 requirements.txt</span><button class="code-copy" onclick="copyCode(this)">复制</button></div>
+        <pre><code>requests>=2.28.0
+playwright>=1.40.0
+pyyaml>=6.0</code></pre>
+      </div>
+    </div>
+
+    <div style="margin-top:28px">
+      <div style="font-size:14px;font-weight:600;margin-bottom:12px">📁 项目结构</div>
+      <div class="file-tree">
+        <div class="dir">paper-tracker/</div>
+        <div class="indent file">├── paper_tracker.py &nbsp;&nbsp;&nbsp;# Playwright 浏览器自动化</div>
+        <div class="indent file">├── config.yaml &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# 关键词、阈值配置</div>
+        <div class="indent file">├── requirements.txt</div>
+        <div class="indent file">├── .env.example</div>
+        <div class="indent file">├── .gitignore</div>
+        <div class="indent file">├── LICENSE</div>
+        <div class="indent file">├── README.md</div>
+        <div class="indent dir">└── .github/workflows/</div>
+        <div class="indent2 file">    └── paper_track.yml</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ GIT PUSH ═══ -->
+<section class="section" id="push">
+  <div class="container">
+    <div class="section-title">🐙 推送到 GitHub</div>
+    <div class="code-block">
+      <div class="code-header"><span class="code-filename">Terminal</span><button class="code-copy" onclick="copyCode(this)">复制</button></div>
+      <pre><code># 1. 解压
+unzip paper-tracker.zip && cd paper-tracker-repo
+
+# 2. 初始化 Git
+git init && git add . && git commit -m "🎉 Init: Paper Tracker"
+
+# 3. 推送（先在 GitHub 建空仓库）
+git remote add origin https://github.com/YOUR_USERNAME/paper-tracker.git
+git branch -M main && git push -u origin main
+
+# 4. 在 GitHub → Settings → Secrets → Actions 添加:
+#    FEISHU_APP_ID / FEISHU_APP_SECRET / FEISHU_WIKI_TOKEN</code></pre>
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <p>Paper Tracker — 数据源 chatpaper.com · 页面关键词检测 · 飞书自动录入</p>
+  <p style="margin-top:8px;font-size:12px">MIT License © 2026</p>
+</footer>
+
+<script>
+function switchTab(btn,id){
+  btn.parentElement.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  btn.closest('.container').querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+function copyCode(btn){
+  const code=btn.closest('.code-block').querySelector('pre code, pre');
+  navigator.clipboard.writeText(code.textContent).then(()=>{
+    btn.textContent='已复制 ✓';btn.classList.add('copied');
+    setTimeout(()=>{btn.textContent='复制';btn.classList.remove('copied')},2000);
+  });
+}
+</script>
+</body>
+</html>
