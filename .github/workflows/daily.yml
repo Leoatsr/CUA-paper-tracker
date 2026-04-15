@@ -28,10 +28,11 @@ jobs:
           FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
           FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
           FEISHU_WIKI_TOKEN: ${{ secrets.FEISHU_WIKI_TOKEN }}
-          HEADLESS: "true"
         run: |
-          sed -i 's/headless.*False/headless": True/' paper_tracker.py
-          sed -i 's/headless.*false/headless: true/' config.yaml
+          python -c "
+          t = open('config.yaml').read().replace('headless: false','headless: true')
+          open('config.yaml','w').write(t)
+          "
           python paper_tracker.py
 
       - name: Upload report
