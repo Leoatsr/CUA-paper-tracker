@@ -7,11 +7,9 @@
 将符合条件的论文自动录入飞书 Wiki。
 
 使用方法:
-    1. 安装依赖: pip install playwright requests pyyaml
-    2. 安装浏览器: playwright install chromium
-    3. 配置 .env 或 config.yaml
-    4. 运行: python paper_tracker.py
-    5. 定时: crontab -e → "0 9 * * * cd /path && python3 paper_tracker.py"
+    1. pip3 install selenium webdriver-manager requests pyyaml
+    2. 配置 .env 或 config.yaml
+    3. python3 paper_tracker.py
 """
 
 import os
@@ -23,11 +21,11 @@ import hashlib
 import requests
 from datetime import datetime, timedelta
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List
 from pathlib import Path
 
 # ============================================================
-# 配置加载：.env → 环境变量 → config.yaml → 默认值
+# 配置加载
 # ============================================================
 
 def _load_dotenv():
@@ -76,32 +74,23 @@ _load_dotenv()
 _yaml = _load_yaml_config()
 
 CONFIG = {
-    # 在 ChatPaper 搜索框中依次搜索的关键词
     "search_keywords": _yaml.get("search_keywords", [
         "GUI Agent", "CUA", "Web Agent", "mobile agent", "computer use",
     ]),
-    # 在论文详情页上统计出现次数的关键词（不下载 PDF）
     "page_check_keywords": _yaml.get("page_check_keywords", [
         "web agent", "gui agent", "computer use", "mobile agent", "CUA",
     ]),
     "keyword_threshold": _yaml.get("keyword_threshold", 2),
     "days_lookback": _yaml.get("days_lookback", 1),
-
-    # ChatPaper 站点地址
     "chatpaper_url": "https://chatpaper.com/zh-CN",
 
-    # 飞书配置
     "feishu_app_id":     os.environ.get("FEISHU_APP_ID",     _yaml.get("feishu_app_id",     "YOUR_APP_ID")),
     "feishu_app_secret": os.environ.get("FEISHU_APP_SECRET", _yaml.get("feishu_app_secret", "YOUR_APP_SECRET")),
     "feishu_wiki_token": os.environ.get("FEISHU_WIKI_TOKEN", _yaml.get("feishu_wiki_token", "NwzAwDKTui4kPok4W0ucJocdnch")),
 
     "log_file":       _yaml.get("log_file",       "paper_tracker.log"),
     "processed_file": _yaml.get("processed_file", "processed_papers.json"),
-
-    # 浏览器
-    "headless":     _yaml.get("headless", True),
-    "slow_mo":      _yaml.get("slow_mo", 300),
-    "page_timeout": _yaml.get("page_timeout", 30000),
+    "headless":       _yaml.get("headless", False),
 }
 
 # ============================================================
@@ -138,212 +127,270 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ============================================================
-# ChatPaper 搜索模块（Playwright 浏览器自动化）
+# ChatPaper 搜索模块（Selenium）
 # ============================================================
 
 class ChatPaperSearcher:
-    """
-    完整工作流（全部在 chatpaper.com/zh-CN 上完成）：
-      1. 打开 chatpaper.com → 在搜索框输入关键词 → 搜索
-      2. 点击 Sort by: Published Date
-      3. 遍历搜索结果列表
-      4. 点进每篇论文详情页 → 在页面文本中统计关键词次数（不下载 PDF）
-      5. 关键词 ≥ 阈值 → 提取作者/摘要等信息 → 录入飞书
-    """
-
     def __init__(self):
-        try:
-            from playwright.sync_api import sync_playwright
-            self._pw_factory = sync_playwright
-        except ImportError:
-            logger.error(
-                "❌ 请安装 Playwright:\n"
-                "   pip install playwright\n"
-                "   playwright install chromium"
-            )
-            raise
-
-    # ── 浏览器生命周期 ──
+        self.driver = None
 
     def start_browser(self):
-        self._pw = self._pw_factory().__enter__()
-        self.browser = self._pw.chromium.launch(
-            headless=CONFIG["headless"],
-            slow_mo=CONFIG["slow_mo"],
-        )
-        self.context = self.browser.new_context(
-            viewport={"width": 1440, "height": 900},
-            locale="zh-CN",
-            user_agent=(
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/124.0.0.0 Safari/537.36"
-            ),
-        )
-        self.page = self.context.new_page()
-        self.page.set_default_timeout(CONFIG["page_timeout"])
+        from selenium.webdriver.chrome.service import Service
+        from selenium.webdriver.chrome.options import Options
+        from webdriver_manager.chrome import ChromeDriverManager
+        from selenium import webdriver
+
+        options = Options()
+        if CONFIG["headless"]:
+            options.add_argument("--headless=new")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--window-size=1440,900")
+
+        service = Service(ChromeDriverManager().install())
+        self.driver = webdriver.Chrome(service=service, options=options)
+        self.driver.implicitly_wait(10)
         logger.info("🌐 浏览器已启动")
 
     def close_browser(self):
-        if self.browser:
-            self.browser.close()
-        if self._pw:
-            self._pw.__exit__(None, None, None)
+        if self.driver:
+            self.driver.quit()
         logger.info("🌐 浏览器已关闭")
 
-    # ── 搜索单个关键词 ──
-
     def search_keyword(self, keyword: str) -> List[dict]:
+        """在 ChatPaper 搜索一个关键词，返回论文列表"""
+        from selenium.webdriver.common.by import By
+
         logger.info(f"🔍 ChatPaper 搜索: {keyword}")
         try:
-            self.page.goto(CONFIG["chatpaper_url"], wait_until="networkidle")
-            time.sleep(2)
+            self.driver.get(CONFIG["chatpaper_url"])
+            time.sleep(4)
 
-            # 找搜索框
-            search_input = self._find_element([
-                'input[placeholder*="paper"]',
-                'input[placeholder*="Paper"]',
-                'input[placeholder*="搜索"]',
-                'input[placeholder*="search"]',
-                'input[type="search"]',
-                'input[type="text"]',
-                '.search-input input',
-                'input.ant-input',
-                'input[class*="search"]',
-            ])
-            if not search_input:
-                logger.error("  找不到搜索框")
-                return []
+            # 用 JavaScript 输入关键词并搜索（直接交互会报错）
+            self.driver.execute_script("""
+                var input = document.querySelector('input[placeholder*="english"]')
+                           || document.querySelector('input[placeholder*="keyword"]')
+                           || document.querySelector('input[type="text"]');
+                if (input) {
+                    input.focus();
+                    input.value = arguments[0];
+                    input.dispatchEvent(new Event('input', {bubbles: true}));
+                }
+            """, keyword)
+            time.sleep(1)
 
-            search_input.click()
-            search_input.fill("")
-            search_input.fill(keyword)
-            time.sleep(0.5)
+            # 点击 search 按钮
+            self.driver.execute_script("""
+                var btns = document.querySelectorAll('button, span, div, a');
+                for (var b of btns) {
+                    if (b.textContent.trim() === 'search') {
+                        b.click();
+                        break;
+                    }
+                }
+            """)
+            time.sleep(5)
 
-            # 点搜索按钮 / 回车
-            btn = self._find_element([
-                'button:has-text("search")',
-                'button:has-text("搜索")',
-                'button:has-text("Search")',
-                'button[type="submit"]',
-                '[class*="search"] button',
-            ])
-            if btn:
-                btn.click()
-            else:
-                self.page.keyboard.press("Enter")
-            time.sleep(3)
+            # 点击 Published Date 排序
+            self.driver.execute_script("""
+                var els = document.querySelectorAll('*');
+                for (var e of els) {
+                    if (e.textContent.trim() === 'Published Date' && e.children.length === 0) {
+                        e.click();
+                        break;
+                    }
+                }
+            """)
+            logger.info("  📅 已切换排序: Published Date")
+            time.sleep(4)
 
-            # 切换排序 → Published Date
-            sort_btn = self._find_element([
-                'text="Published Date"',
-                'button:has-text("Published Date")',
-                'span:has-text("Published Date")',
-                'a:has-text("Published Date")',
-            ])
-            if sort_btn:
-                sort_btn.click()
-                logger.info("  📅 已切换排序: Published Date")
-                time.sleep(2)
-            else:
-                logger.warning("  ⚠️ 未找到排序按钮，使用默认排序")
+            # 解析页面文本提取论文
+            body_text = self.driver.find_element(By.TAG_NAME, "body").text
+            papers = self._parse_papers(body_text)
+            logger.info(f"  找到 {len(papers)} 篇论文")
 
-            # 提取结果
-            results = self._extract_results()
-            logger.info(f"  找到 {len(results)} 篇论文")
-            return results
+            # 提取链接
+            links = self.driver.find_elements(By.CSS_SELECTOR, "a[href*='/paper/']")
+            link_map = {}
+            for a in links:
+                href = a.get_attribute("href") or ""
+                text = a.text.strip()
+                if href and text:
+                    link_map[text[:30]] = href
+
+            for p in papers:
+                for key, url in link_map.items():
+                    if key in p.get("title_en", "") or key in p.get("title_zh", ""):
+                        p["chatpaper_url"] = url
+                        break
+
+            return papers
 
         except Exception as e:
             logger.error(f"  搜索失败 [{keyword}]: {e}")
             return []
 
-    # ── 在详情页上检查关键词（不下载 PDF）──
+    def _parse_papers(self, text: str) -> List[dict]:
+        """
+        解析页面文本，ChatPaper 格式如下：
+        1.中文标题
+        AI Chat
+        English Title
+        cs.AI
+        06 Mar 2025
+        Institution;
+        """
+        papers = []
+        cutoff = datetime.now() - timedelta(days=CONFIG["days_lookback"])
+
+        # 按编号分割论文
+        chunks = re.split(r'\n\d+\.', text)
+
+        for chunk in chunks[1:]:  # 跳过第一个（搜索框之前的内容）
+            lines = [l.strip() for l in chunk.split("\n") if l.strip()]
+            if len(lines) < 3:
+                continue
+
+            title_zh = ""
+            title_en = ""
+            date_str = ""
+            categories = []
+            institution = ""
+
+            for line in lines:
+                if line in ("AI Chat", "search", "track", "Sort by:", "Relevance", "Published Date"):
+                    continue
+
+                # 日期：DD Mon YYYY
+                date_match = re.match(r"^(\d{1,2}\s+\w{3}\s+\d{4})$", line)
+                if date_match:
+                    date_str = date_match.group(1)
+                    continue
+
+                # 分类：cs.XX
+                if re.match(r"^(cs\.\w+\s*)+$", line):
+                    categories = re.findall(r"cs\.\w+", line)
+                    continue
+
+                # 会议标签：如 CVPR 2025, ACL 2024, ICLR 2026
+                if re.match(r"^[A-Z]{2,10}\s+\d{4}$", line):
+                    continue
+
+                # 机构
+                if ";" in line and len(line) > 20:
+                    institution = line
+                    continue
+
+                # 标题
+                if re.search(r"[\u4e00-\u9fff]", line) and not title_zh:
+                    title_zh = line
+                elif re.search(r"[a-zA-Z]", line) and len(line) > 10 and not title_en:
+                    title_en = line
+
+            if not title_en and not title_zh:
+                continue
+
+            # 日期过滤
+            if date_str:
+                try:
+                    pub_date = datetime.strptime(date_str, "%d %b %Y")
+                    if pub_date < cutoff:
+                        continue
+                    date_str = pub_date.strftime("%Y-%m-%d")
+                except ValueError:
+                    pass
+
+            papers.append({
+                "title_zh": title_zh,
+                "title_en": title_en or title_zh,
+                "date": date_str,
+                "categories": categories,
+                "institution": institution,
+                "chatpaper_url": "",
+            })
+
+        return papers
 
     def check_keywords_on_page(self, url: str) -> int:
-        """打开论文详情页，在网页文本中统计关键词出现次数。"""
+        """打开论文详情页，统计关键词次数（不下载 PDF）"""
+        from selenium.webdriver.common.by import By
+
         if not url:
             return 0
-        detail = None
         try:
-            detail = self.context.new_page()
-            detail.set_default_timeout(CONFIG["page_timeout"])
-            detail.goto(url, wait_until="networkidle")
-            time.sleep(2)
+            self.driver.execute_script("window.open('');")
+            self.driver.switch_to.window(self.driver.window_handles[-1])
+            self.driver.get(url)
+            time.sleep(4)
 
-            page_text = detail.inner_text("body").lower()
+            page_text = self.driver.find_element(By.TAG_NAME, "body").text.lower()
 
             total = 0
             for kw in CONFIG["page_check_keywords"]:
-                count = page_text.count(kw.lower())
-                if count > 0:
-                    logger.debug(f"    '{kw}' × {count}")
-                total += count
+                total += page_text.count(kw.lower())
 
-            detail.close()
+            self.driver.close()
+            self.driver.switch_to.window(self.driver.window_handles[0])
             return total
+
         except Exception as e:
-            logger.error(f"  详情页访问失败: {e}")
-            if detail:
-                try: detail.close()
-                except: pass
+            logger.error(f"  详情页失败: {e}")
+            try:
+                if len(self.driver.window_handles) > 1:
+                    self.driver.close()
+                    self.driver.switch_to.window(self.driver.window_handles[0])
+            except:
+                pass
             return 0
 
-    # ── 从详情页提取作者 / 摘要等 ──
-
     def extract_details(self, url: str) -> dict:
-        info = {"authors": [], "institution": "", "abstract": "", "arxiv_url": ""}
+        """提取摘要、arXiv 链接等"""
+        from selenium.webdriver.common.by import By
+
+        info = {"abstract": "", "arxiv_url": ""}
         if not url:
             return info
-        detail = None
         try:
-            detail = self.context.new_page()
-            detail.set_default_timeout(CONFIG["page_timeout"])
-            detail.goto(url, wait_until="networkidle")
-            time.sleep(2)
+            self.driver.execute_script("window.open('');")
+            self.driver.switch_to.window(self.driver.window_handles[-1])
+            self.driver.get(url)
+            time.sleep(4)
 
             # arXiv 链接
-            for a in detail.query_selector_all('a[href*="arxiv.org"]'):
+            for a in self.driver.find_elements(By.CSS_SELECTOR, 'a[href*="arxiv.org"]'):
                 href = a.get_attribute("href") or ""
                 if "abs" in href:
                     info["arxiv_url"] = href
                     break
 
             # 摘要
-            for sel in ['div[class*="abstract"]', 'p[class*="abstract"]',
-                        'section[class*="abstract"]', 'div[class*="summary"]', 'blockquote']:
-                el = detail.query_selector(sel)
-                if el:
-                    txt = el.inner_text().strip()
-                    if len(txt) > 50:
-                        info["abstract"] = txt[:1000]
+            body = self.driver.find_element(By.TAG_NAME, "body").text
+            for marker in ["Abstract", "摘要"]:
+                idx = body.find(marker)
+                if idx >= 0:
+                    chunk = body[idx + len(marker):idx + len(marker) + 800].strip()
+                    if len(chunk) > 50:
+                        info["abstract"] = chunk
                         break
 
-            if not info["abstract"]:
-                body = detail.inner_text("body")
-                for marker in ["Abstract", "摘要", "Summary"]:
-                    idx = body.find(marker)
-                    if idx >= 0:
-                        chunk = body[idx + len(marker):idx + len(marker) + 800].strip()
-                        if len(chunk) > 50:
-                            info["abstract"] = chunk
-                            break
-
-            detail.close()
+            self.driver.close()
+            self.driver.switch_to.window(self.driver.window_handles[0])
         except Exception as e:
             logger.debug(f"  提取详情失败: {e}")
-            if detail:
-                try: detail.close()
-                except: pass
+            try:
+                if len(self.driver.window_handles) > 1:
+                    self.driver.close()
+                    self.driver.switch_to.window(self.driver.window_handles[0])
+            except:
+                pass
         return info
 
-    # ── 主入口 ──
-
     def search_all_keywords(self) -> List[Paper]:
+        """搜索所有关键词 → 合并去重 → 逐篇检查"""
         all_papers = {}
 
         self.start_browser()
         try:
-            # 1) 对每个关键词搜索
             for kw in CONFIG["search_keywords"]:
                 for r in self.search_keyword(kw):
                     key = r.get("title_en") or r.get("title_zh") or ""
@@ -354,13 +401,13 @@ class ChatPaperSearcher:
                         title_en=r.get("title_en", ""),
                         date=r.get("date", ""),
                         categories=r.get("categories", []),
+                        institution=r.get("institution", ""),
                         chatpaper_url=r.get("chatpaper_url", ""),
                     )
                 time.sleep(2)
 
             logger.info(f"📊 去重后共 {len(all_papers)} 篇")
 
-            # 2) 逐篇：进详情页检查关键词（不下载 PDF）
             papers = list(all_papers.values())
             for p in papers:
                 if not p.chatpaper_url:
@@ -369,11 +416,8 @@ class ChatPaperSearcher:
                 p.keyword_count = self.check_keywords_on_page(p.chatpaper_url)
                 logger.info(f"   页面关键词 × {p.keyword_count}")
 
-                # 只为符合条件的论文提取详情（节省时间）
                 if p.keyword_count >= CONFIG["keyword_threshold"]:
                     d = self.extract_details(p.chatpaper_url)
-                    p.authors = d["authors"]
-                    p.institution = d["institution"]
                     p.abstract = d["abstract"]
                     p.arxiv_url = d["arxiv_url"]
 
@@ -382,99 +426,6 @@ class ChatPaperSearcher:
             return papers
         finally:
             self.close_browser()
-
-    # ── 工具方法 ──
-
-    def _find_element(self, selectors: list):
-        for sel in selectors:
-            try:
-                el = self.page.query_selector(sel)
-                if el and el.is_visible():
-                    return el
-            except: pass
-        return None
-
-    def _extract_results(self) -> List[dict]:
-        cutoff = datetime.now() - timedelta(days=CONFIG["days_lookback"])
-        papers = []
-
-        # 尝试多种卡片选择器
-        cards = []
-        for sel in ['div[class*="paper"]', 'div[class*="result"]',
-                     'div[class*="card"]', 'article', 'li[class*="paper"]']:
-            cards = self.page.query_selector_all(sel)
-            if cards:
-                break
-
-        for card in cards[:30]:
-            try:
-                text = card.inner_text()
-                if not text or len(text.strip()) < 15:
-                    continue
-
-                lines = [l.strip() for l in text.split("\n") if l.strip()]
-                date_str = self._extract_date(text)
-
-                # 日期过滤
-                if date_str:
-                    try:
-                        pd = datetime.strptime(date_str, "%Y-%m-%d")
-                        if pd < cutoff:
-                            continue
-                    except ValueError:
-                        pass
-
-                # 标题
-                title_zh, title_en = "", ""
-                for line in lines:
-                    if len(line) < 10 or re.match(r"^(cs\.|PDF|\d{4})", line):
-                        continue
-                    if re.search(r"[\u4e00-\u9fff]", line) and not title_zh:
-                        title_zh = line
-                    elif not title_en:
-                        title_en = line
-
-                if not title_en and not title_zh:
-                    continue
-
-                # 链接
-                link = ""
-                try:
-                    a = card.query_selector("a[href]")
-                    if a:
-                        link = a.get_attribute("href") or ""
-                        if link.startswith("/"):
-                            link = f"https://chatpaper.com{link}"
-                except: pass
-
-                papers.append({
-                    "title_zh": title_zh,
-                    "title_en": title_en or title_zh,
-                    "date": date_str,
-                    "categories": re.findall(r"cs\.\w+", text),
-                    "chatpaper_url": link,
-                })
-            except: continue
-
-        return papers
-
-    @staticmethod
-    def _extract_date(text: str) -> str:
-        for pattern, fmt in [
-            (r"(\d{4}-\d{2}-\d{2})", "%Y-%m-%d"),
-            (r"(\d{1,2}\s+\w{3}\s+\d{4})", "%d %b %Y"),
-            (r"(\w{3}\s+\d{1,2},?\s+\d{4})", None),
-        ]:
-            m = re.search(pattern, text)
-            if m:
-                raw = m.group(1)
-                if fmt:
-                    try:
-                        return datetime.strptime(raw, fmt).strftime("%Y-%m-%d")
-                    except ValueError:
-                        pass
-                return raw
-        return ""
 
 
 # ============================================================
@@ -490,7 +441,7 @@ class FeishuClient:
         self.token = None
         self.token_expires = 0
 
-    def _get_tenant_token(self) -> str:
+    def _get_tenant_token(self):
         if self.token and time.time() < self.token_expires:
             return self.token
         resp = requests.post(f"{self.BASE_URL}/auth/v3/tenant_access_token/internal", json={
@@ -517,7 +468,7 @@ class FeishuClient:
                 logger.error(f"文档追加也失败: {e2}")
                 return False
 
-    def _add_to_bitable(self, paper: Paper) -> bool:
+    def _add_to_bitable(self, paper):
         wt = CONFIG["feishu_wiki_token"]
         resp = requests.get(f"{self.BASE_URL}/wiki/v2/spaces/get_node",
                             headers=self._headers(), params={"token": wt})
@@ -529,7 +480,7 @@ class FeishuClient:
             return self._insert_record(node["obj_token"], paper)
         return self._append_to_doc(paper)
 
-    def _insert_record(self, app_token: str, paper: Paper) -> bool:
+    def _insert_record(self, app_token, paper):
         resp = requests.get(f"{self.BASE_URL}/bitable/v1/apps/{app_token}/tables",
                             headers=self._headers())
         tables = resp.json().get("data", {}).get("items", [])
@@ -556,13 +507,13 @@ class FeishuClient:
             return True
         raise Exception(f"插入失败: {result}")
 
-    def _append_to_doc(self, paper: Paper) -> bool:
+    def _append_to_doc(self, paper):
         wt = CONFIG["feishu_wiki_token"]
         body = {"element_type": 2, "children": [{"element_type": 1, "text_run": {"content":
             f"\n📄 {paper.title_en}\n中文: {paper.title_zh}\n"
-            f"作者: {', '.join(paper.authors[:5])}\n日期: {paper.date}\n"
-            f"机构: {paper.institution}\nArXiv: {paper.arxiv_url}\n"
-            f"ChatPaper: {paper.chatpaper_url}\n摘要: {paper.abstract[:300]}\n---\n"
+            f"日期: {paper.date}\n机构: {paper.institution}\n"
+            f"ArXiv: {paper.arxiv_url}\nChatPaper: {paper.chatpaper_url}\n"
+            f"摘要: {paper.abstract[:300]}\n---\n"
         }}]}
         resp = requests.post(
             f"{self.BASE_URL}/docx/v1/documents/{wt}/blocks/{wt}/children",
@@ -574,8 +525,8 @@ class FeishuClient:
         raise Exception(f"追加失败: {result}")
 
     @staticmethod
-    def _ts(date_str: str) -> int:
-        for fmt in ["%Y-%m-%d", "%d %b %Y", "%b %d, %Y"]:
+    def _ts(date_str):
+        for fmt in ["%Y-%m-%d", "%d %b %Y"]:
             try: return int(datetime.strptime(date_str, fmt).timestamp() * 1000)
             except ValueError: continue
         return int(datetime.now().timestamp() * 1000)
@@ -590,7 +541,7 @@ class ProcessedTracker:
         self.filepath = CONFIG["processed_file"]
         self.processed = self._load()
 
-    def _load(self) -> set:
+    def _load(self):
         if os.path.exists(self.filepath):
             with open(self.filepath, "r") as f:
                 return set(json.load(f))
@@ -600,10 +551,10 @@ class ProcessedTracker:
         with open(self.filepath, "w") as f:
             json.dump(list(self.processed), f, indent=2)
 
-    def is_processed(self, p: Paper) -> bool:
+    def is_processed(self, p):
         return hashlib.md5((p.title_en or p.title_zh).encode()).hexdigest() in self.processed
 
-    def mark_processed(self, p: Paper):
+    def mark_processed(self, p):
         self.processed.add(hashlib.md5((p.title_en or p.title_zh).encode()).hexdigest())
         self._save()
 
@@ -618,24 +569,21 @@ def main():
     logger.info(f"   日期:   {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info(f"   数据源: {CONFIG['chatpaper_url']}")
     logger.info(f"   搜索:   {CONFIG['search_keywords']}")
-    logger.info(f"   页面检测关键词: {CONFIG['page_check_keywords']}")
     logger.info(f"   阈值:   ≥ {CONFIG['keyword_threshold']} 次")
     logger.info(f"   范围:   最近 {CONFIG['days_lookback']} 天")
     logger.info("=" * 60)
 
     searcher = ChatPaperSearcher()
-    feishu  = FeishuClient()
+    feishu = FeishuClient()
     tracker = ProcessedTracker()
 
-    # ── 步骤 1: 在 ChatPaper 搜索 + 页面关键词检测 ──
     logger.info("\n📡 步骤1: ChatPaper 搜索 + 页面关键词检测...")
     papers = searcher.search_all_keywords()
 
     if not papers:
-        logger.info("未找到新论文，结束。")
+        logger.info("今天没有找到符合日期范围的新论文。")
         return
 
-    # ── 步骤 2: 筛选 ──
     qualified = []
     for p in papers:
         if tracker.is_processed(p):
@@ -647,7 +595,6 @@ def main():
         else:
             logger.info(f"  ❌ 不符: {p.title_en[:50]} (×{p.keyword_count})")
 
-    # ── 步骤 3: 录入飞书 ──
     logger.info(f"\n📝 步骤2: 录入 {len(qualified)} 篇 → 飞书...")
     ok = 0
     for p in qualified:
@@ -659,7 +606,6 @@ def main():
             logger.error(f"  录入失败: {e}")
         time.sleep(1)
 
-    # ── 汇总 ──
     logger.info("\n" + "=" * 60)
     logger.info(f"🏁 完成！搜索 {len(papers)} → 符合 {len(qualified)} → 录入 {ok}")
     logger.info("=" * 60)
@@ -670,8 +616,96 @@ def main():
             logger.info(f"  {i}. {p.title_en}")
             if p.title_zh: logger.info(f"     中文: {p.title_zh}")
             logger.info(f"     {p.date} | 关键词×{p.keyword_count}")
-            if p.chatpaper_url: logger.info(f"     {p.chatpaper_url}")
             logger.info("")
+
+    # 生成 HTML 报告
+    generate_report(papers, qualified, ok)
+
+
+def generate_report(all_papers, qualified, feishu_ok):
+    """生成可视化 HTML 报告"""
+    today = datetime.now().strftime("%Y-%m-%d %H:%M")
+    report_path = Path(__file__).parent / "report.html"
+
+    qualified_rows = ""
+    for i, p in enumerate(qualified, 1):
+        cats = " ".join(f'<span style="background:#1f6feb22;color:#58a6ff;padding:2px 8px;border-radius:10px;font-size:11px">{c}</span>' for c in p.categories)
+        link = f'<a href="{p.chatpaper_url}" target="_blank" style="color:#58a6ff;text-decoration:none">详情页</a>' if p.chatpaper_url else ""
+        arxiv = f' · <a href="{p.arxiv_url}" target="_blank" style="color:#58a6ff;text-decoration:none">arXiv</a>' if p.arxiv_url else ""
+        qualified_rows += f"""
+        <div style="background:#161b22;border:1px solid #238636;border-radius:10px;padding:16px 20px;margin-bottom:10px">
+          <div style="font-size:15px;font-weight:600;color:#e6edf3;margin-bottom:4px">{i}. {p.title_en}</div>
+          <div style="font-size:13px;color:#8b949e;margin-bottom:8px">{p.title_zh}</div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:#8b949e">
+            {cats}
+            <span>📅 {p.date}</span>
+            <span style="color:#3fb950;font-weight:600">关键词 ×{p.keyword_count}</span>
+            {link}{arxiv}
+          </div>
+          <div style="font-size:12px;color:#8b949e;margin-top:6px">{p.institution}</div>
+        </div>"""
+
+    all_rows = ""
+    for p in all_papers:
+        status_color = "#3fb950" if p.keyword_count >= CONFIG["keyword_threshold"] else ("#f85149" if p.keyword_count == 0 else "#f0883e")
+        status_icon = "✅" if p.keyword_count >= CONFIG["keyword_threshold"] else "❌"
+        all_rows += f"""
+        <tr style="border-bottom:1px solid #21262d">
+          <td style="padding:8px 12px;font-size:13px;color:#e6edf3;max-width:400px">{p.title_en[:60]}{'...' if len(p.title_en) > 60 else ''}</td>
+          <td style="padding:8px 12px;font-size:12px;color:#8b949e">{p.date}</td>
+          <td style="padding:8px 12px;font-size:13px;color:{status_color};font-weight:600;text-align:center">{status_icon} ×{p.keyword_count}</td>
+        </tr>"""
+
+    html = f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Paper Tracker 报告 - {today}</title>
+<style>
+  *{{margin:0;padding:0;box-sizing:border-box}}
+  body{{background:#0a0a0f;color:#e6edf3;font-family:-apple-system,'Noto Sans SC',sans-serif;padding:24px}}
+  .container{{max-width:860px;margin:0 auto}}
+  h1{{font-size:24px;font-weight:700;margin-bottom:6px}}
+  .sub{{font-size:14px;color:#8b949e;margin-bottom:24px}}
+  .stats{{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:28px}}
+  .stat{{background:#161b22;border:1px solid #21262d;border-radius:10px;padding:16px;text-align:center}}
+  .stat-num{{font-size:28px;font-weight:700}}
+  .stat-label{{font-size:12px;color:#8b949e;margin-top:4px}}
+  .section-title{{font-size:18px;font-weight:600;margin:28px 0 14px;display:flex;align-items:center;gap:8px}}
+  table{{width:100%;border-collapse:collapse;background:#161b22;border:1px solid #21262d;border-radius:10px;overflow:hidden}}
+  th{{text-align:left;padding:10px 12px;font-size:12px;color:#8b949e;background:#0d1117;font-weight:500}}
+</style></head><body>
+<div class="container">
+  <h1>📄 Paper Tracker 报告</h1>
+  <div class="sub">{today} · 数据源 chatpaper.com · 阈值 ≥{CONFIG['keyword_threshold']} 次</div>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-num" style="color:#58a6ff">{len(all_papers)}</div><div class="stat-label">搜索论文总数</div></div>
+    <div class="stat"><div class="stat-num" style="color:#3fb950">{len(qualified)}</div><div class="stat-label">符合条件</div></div>
+    <div class="stat"><div class="stat-num" style="color:#bc8cff">{feishu_ok}</div><div class="stat-label">成功录入飞书</div></div>
+    <div class="stat"><div class="stat-num" style="color:#f0883e">{len(CONFIG['search_keywords'])}</div><div class="stat-label">搜索关键词数</div></div>
+  </div>
+
+  <div class="section-title">✅ 符合条件的论文 ({len(qualified)} 篇)</div>
+  {qualified_rows if qualified else '<div style="background:#161b22;border:1px solid #21262d;border-radius:10px;padding:24px;text-align:center;color:#8b949e">今天没有符合条件的论文</div>'}
+
+  <div class="section-title">📋 全部搜索结果 ({len(all_papers)} 篇)</div>
+  <table>
+    <tr><th>论文标题</th><th>日期</th><th>关键词</th></tr>
+    {all_rows}
+  </table>
+
+  <div style="margin-top:24px;font-size:12px;color:#484f58;text-align:center">
+    搜索关键词: {', '.join(CONFIG['search_keywords'])} · 检测关键词: {', '.join(CONFIG['page_check_keywords'])}
+  </div>
+</div></body></html>"""
+
+    report_path.write_text(html, encoding="utf-8")
+    logger.info(f"\n📊 报告已生成: {report_path}")
+    logger.info(f"   在浏览器中打开: open {report_path}")
+
+    # macOS 自动打开报告
+    import platform
+    if platform.system() == "Darwin":
+        os.system(f'open "{report_path}"')
 
 
 if __name__ == "__main__":

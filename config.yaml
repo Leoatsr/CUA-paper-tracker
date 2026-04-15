@@ -26,7 +26,7 @@ keyword_threshold: 2
 days_lookback: 1
 
 # 浏览器设置
-headless: true
+headless: false
 slow_mo: 300
 page_timeout: 30000
 
