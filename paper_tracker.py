@@ -170,39 +170,12 @@ class ChatPaperSearcher:
         logger.info(f"  📅 只看 {cutoff.strftime('%Y-%m-%d')} 及之后的论文")
 
         try:
-            self.driver.get(CONFIG["chatpaper_url"])
-            time.sleep(5)
-
-            self.driver.execute_script("""
-                var input = document.querySelector('input[placeholder*="english"]')
-                           || document.querySelector('input[placeholder*="keyword"]')
-                           || document.querySelector('input[type="text"]');
-                if (input) {
-                    input.focus();
-                    input.value = arguments[0];
-                    input.dispatchEvent(new Event('input', {bubbles: true}));
-                }
-            """, keyword)
-            time.sleep(1)
-
-            self.driver.execute_script("""
-                var btns = document.querySelectorAll('button, span, div, a');
-                for (var b of btns) {
-                    if (b.textContent.trim() === 'search') { b.click(); break; }
-                }
-            """)
+            # 直接通过 URL 搜索+排序，不依赖 UI 交互
+            encoded_kw = keyword.replace(' ', '+')
+            search_url = f"https://chatpaper.com/zh-CN/search?keywords={encoded_kw}&type=all&sort=date"
+            self.driver.get(search_url)
+            logger.info(f"  📅 直接访问排序后的搜索 URL")
             time.sleep(6)
-
-            # 直接通过 URL 参数排序，不依赖点击按钮
-            current_url = self.driver.current_url
-            if "sort=" not in current_url:
-                sep = "&" if "?" in current_url else "?"
-                sorted_url = f"{current_url}{sep}sort=date"
-            else:
-                sorted_url = re.sub(r'sort=\w+', 'sort=date', current_url)
-            self.driver.get(sorted_url)
-            logger.info("  📅 已切换排序: Published Date (URL)")
-            time.sleep(5)
 
             base_url = self.driver.current_url
 
@@ -336,7 +309,7 @@ class ChatPaperSearcher:
                 continue
 
             # 跳过误识别的非论文内容
-            skip_words = ["Sort by", "Relevance", "Published Date", "All Papers", "search", "track"]
+            skip_words = ["Sort by", "Relevance", "Published Date", "All Papers", "search", "track", "Update :"]
             if any(sw in (title_en or title_zh) for sw in skip_words):
                 continue
 
@@ -737,15 +710,16 @@ def main():
 
 
 def generate_report(all_papers, qualified, feishu_ok):
-    """生成可视化 HTML 报告"""
+    """生成可视化 HTML 报告，只显示符合条件的论文"""
     today = datetime.now().strftime("%Y-%m-%d %H:%M")
     report_path = Path(__file__).parent / "report.html"
 
     qualified_rows = ""
     for i, p in enumerate(qualified, 1):
         cats = " ".join(f'<span style="background:#1f6feb22;color:#58a6ff;padding:2px 8px;border-radius:10px;font-size:11px">{c}</span>' for c in p.categories)
-        link = f'<a href="{p.chatpaper_url}" target="_blank" style="color:#58a6ff;text-decoration:none">详情页</a>' if p.chatpaper_url else ""
+        link = f'<a href="{p.chatpaper_url}" target="_blank" style="color:#58a6ff;text-decoration:none">ChatPaper</a>' if p.chatpaper_url else ""
         arxiv = f' · <a href="{p.arxiv_url}" target="_blank" style="color:#58a6ff;text-decoration:none">arXiv</a>' if p.arxiv_url else ""
+        feishu_badge = '<span style="background:#23863622;color:#3fb950;padding:2px 8px;border-radius:10px;font-size:11px">已录入飞书</span>' if feishu_ok > 0 else ""
         qualified_rows += f"""
         <div style="background:#161b22;border:1px solid #238636;border-radius:10px;padding:16px 20px;margin-bottom:10px">
           <div style="font-size:15px;font-weight:600;color:#e6edf3;margin-bottom:4px">{i}. {p.title_en}</div>
@@ -755,20 +729,11 @@ def generate_report(all_papers, qualified, feishu_ok):
             <span>📅 {p.date}</span>
             <span style="color:#3fb950;font-weight:600">关键词 ×{p.keyword_count}</span>
             {link}{arxiv}
+            {feishu_badge}
           </div>
           <div style="font-size:12px;color:#8b949e;margin-top:6px">{p.institution}</div>
+          {'<div style="font-size:12px;color:#6e7681;margin-top:8px;line-height:1.5">' + p.abstract[:200] + '...</div>' if p.abstract else ''}
         </div>"""
-
-    all_rows = ""
-    for p in all_papers:
-        status_color = "#3fb950" if p.keyword_count >= CONFIG["keyword_threshold"] else ("#f85149" if p.keyword_count == 0 else "#f0883e")
-        status_icon = "✅" if p.keyword_count >= CONFIG["keyword_threshold"] else "❌"
-        all_rows += f"""
-        <tr style="border-bottom:1px solid #21262d">
-          <td style="padding:8px 12px;font-size:13px;color:#e6edf3;max-width:400px">{p.title_en[:60]}{'...' if len(p.title_en) > 60 else ''}</td>
-          <td style="padding:8px 12px;font-size:12px;color:#8b949e">{p.date}</td>
-          <td style="padding:8px 12px;font-size:13px;color:{status_color};font-weight:600;text-align:center">{status_icon} ×{p.keyword_count}</td>
-        </tr>"""
 
     html = f"""<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -779,44 +744,35 @@ def generate_report(all_papers, qualified, feishu_ok):
   .container{{max-width:860px;margin:0 auto}}
   h1{{font-size:24px;font-weight:700;margin-bottom:6px}}
   .sub{{font-size:14px;color:#8b949e;margin-bottom:24px}}
-  .stats{{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:28px}}
+  .stats{{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:28px}}
   .stat{{background:#161b22;border:1px solid #21262d;border-radius:10px;padding:16px;text-align:center}}
   .stat-num{{font-size:28px;font-weight:700}}
   .stat-label{{font-size:12px;color:#8b949e;margin-top:4px}}
-  .section-title{{font-size:18px;font-weight:600;margin:28px 0 14px;display:flex;align-items:center;gap:8px}}
-  table{{width:100%;border-collapse:collapse;background:#161b22;border:1px solid #21262d;border-radius:10px;overflow:hidden}}
-  th{{text-align:left;padding:10px 12px;font-size:12px;color:#8b949e;background:#0d1117;font-weight:500}}
+  .section-title{{font-size:18px;font-weight:600;margin:28px 0 14px}}
 </style></head><body>
 <div class="container">
   <h1>📄 Paper Tracker 报告</h1>
-  <div class="sub">{today} · 数据源 chatpaper.com · 阈值 ≥{CONFIG['keyword_threshold']} 次</div>
+  <div class="sub">{today} · chatpaper.com · 关键词 ≥{CONFIG['keyword_threshold']} 次</div>
 
   <div class="stats">
-    <div class="stat"><div class="stat-num" style="color:#58a6ff">{len(all_papers)}</div><div class="stat-label">搜索论文总数</div></div>
+    <div class="stat"><div class="stat-num" style="color:#58a6ff">{len(all_papers)}</div><div class="stat-label">扫描论文总数</div></div>
     <div class="stat"><div class="stat-num" style="color:#3fb950">{len(qualified)}</div><div class="stat-label">符合条件</div></div>
-    <div class="stat"><div class="stat-num" style="color:#bc8cff">{feishu_ok}</div><div class="stat-label">成功录入飞书</div></div>
-    <div class="stat"><div class="stat-num" style="color:#f0883e">{len(CONFIG['search_keywords'])}</div><div class="stat-label">搜索关键词数</div></div>
+    <div class="stat"><div class="stat-num" style="color:#bc8cff">{feishu_ok}</div><div class="stat-label">已录入飞书</div></div>
   </div>
 
-  <div class="section-title">✅ 符合条件的论文 ({len(qualified)} 篇)</div>
+  <div class="section-title">✅ 符合条件的论文（{len(qualified)} 篇）</div>
   {qualified_rows if qualified else '<div style="background:#161b22;border:1px solid #21262d;border-radius:10px;padding:24px;text-align:center;color:#8b949e">今天没有符合条件的论文</div>'}
 
-  <div class="section-title">📋 全部搜索结果 ({len(all_papers)} 篇)</div>
-  <table>
-    <tr><th>论文标题</th><th>日期</th><th>关键词</th></tr>
-    {all_rows}
-  </table>
-
   <div style="margin-top:24px;font-size:12px;color:#484f58;text-align:center">
-    搜索关键词: {', '.join(CONFIG['search_keywords'])} · 检测关键词: {', '.join(CONFIG['page_check_keywords'])}
+    搜索关键词: {', '.join(CONFIG['search_keywords'])}<br>
+    检测关键词: {', '.join(CONFIG['page_check_keywords'])}<br>
+    共扫描 {len(all_papers)} 篇，{len(all_papers) - len(qualified)} 篇未检测到足够关键词
   </div>
 </div></body></html>"""
 
     report_path.write_text(html, encoding="utf-8")
     logger.info(f"\n📊 报告已生成: {report_path}")
-    logger.info(f"   在浏览器中打开: open {report_path}")
 
-    # macOS 自动打开报告
     import platform
     if platform.system() == "Darwin":
         os.system(f'open "{report_path}"')
