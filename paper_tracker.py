@@ -481,24 +481,38 @@ class FeishuClient:
         return self._append_to_doc(paper)
 
     def _insert_record(self, app_token, paper):
-        resp = requests.get(f"{self.BASE_URL}/bitable/v1/apps/{app_token}/tables",
-                            headers=self._headers())
-        tables = resp.json().get("data", {}).get("items", [])
-        if not tables:
-            raise Exception("未找到多维表格")
-        tid = tables[0]["table_id"]
+        # 优先使用 URL 中指定的 table_id
+        tid = "tbljpDAPiBSJ2HMT"
 
-        record = {"fields": {
-            "论文": paper.title_en,
-            "标题": paper.title_zh or paper.title_en,
-            "机构": paper.institution,
-            "日期": self._ts(paper.date),
-            "作者": ", ".join(paper.authors[:5]) if paper.authors else "",
-            "arxiv": {"link": paper.arxiv_url, "text": paper.arxiv_url} if paper.arxiv_url else "",
-            "Project": {"link": paper.project_url, "text": paper.project_url} if paper.project_url else "",
-            "概要": paper.abstract[:500] if paper.abstract else "",
-            "简介": paper.summary or "",
-        }}
+        # 机构字段是多选类型，需要拆分成列表
+        institution_list = []
+        if paper.institution:
+            institution_list = [s.strip() for s in paper.institution.replace("；", ";").split(";") if s.strip()]
+
+        # 作者字段也可能是多选
+        author_list = []
+        if paper.authors:
+            author_list = [a.strip() for a in paper.authors[:5] if a.strip()]
+
+        # 构建字段（跳过空值字段，避免格式错误）
+        fields = {}
+        fields["论文"] = paper.title_en
+        if paper.title_zh:
+            fields["标题"] = paper.title_zh
+        if institution_list:
+            fields["机构"] = institution_list
+        if paper.date:
+            fields["日期"] = self._ts(paper.date)
+        if author_list:
+            fields["作者"] = author_list
+        if paper.arxiv_url:
+            fields["arxiv"] = {"link": paper.arxiv_url, "text": paper.arxiv_url}
+        if paper.chatpaper_url:
+            fields["Project"] = {"link": paper.chatpaper_url, "text": paper.chatpaper_url}
+        if paper.abstract:
+            fields["概要"] = paper.abstract[:500]
+
+        record = {"fields": fields}
         resp = requests.post(f"{self.BASE_URL}/bitable/v1/apps/{app_token}/tables/{tid}/records",
                              headers=self._headers(), json=record)
         result = resp.json()
