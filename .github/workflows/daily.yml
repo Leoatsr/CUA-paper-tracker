@@ -24,7 +24,7 @@ jobs:
       - name: Install dependencies
         run: pip install selenium webdriver-manager requests pyyaml
 
-     - name: Run tracker
+      - name: Run tracker
         env:
           FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
           FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
