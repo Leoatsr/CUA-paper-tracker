@@ -29,37 +29,20 @@ jobs:
           FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
           FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
           FEISHU_WIKI_TOKEN: ${{ secrets.FEISHU_WIKI_TOKEN }}
+          TZ: Asia/Shanghai
         run: |
           python -c "
           t = open('config.yaml').read().replace('headless: false','headless: true')
           open('config.yaml','w').write(t)
           "
-          python -c "
-          from selenium import webdriver
-          from selenium.webdriver.common.by import By
-          from selenium.webdriver.chrome.service import Service
-          from selenium.webdriver.chrome.options import Options
-          from webdriver_manager.chrome import ChromeDriverManager
-          import time
-          options = Options()
-          options.add_argument('--headless=new')
-          options.add_argument('--no-sandbox')
-          options.add_argument('--disable-dev-shm-usage')
-          service = Service(ChromeDriverManager().install())
-          driver = webdriver.Chrome(service=service, options=options)
-          driver.get('https://chatpaper.com/zh-CN/search?keywords=GUI+Agent&type=all&sort=date')
-          time.sleep(8)
-          text = driver.find_element(By.TAG_NAME, 'body').text
-          print(text[:2000])
-          driver.quit()
-          "
+          python paper_tracker.py
 
       - name: Save processed records
         run: |
           git config user.email "action@github.com"
           git config user.name "Paper Tracker Bot"
           git add processed_papers.json || true
-          git diff --staged --quiet || git commit -m "update processed papers [$(date +%Y-%m-%d-%H%M)]"
+          git diff --staged --quiet || git commit -m "update processed [$(date +%Y-%m-%d-%H%M)]"
           git push || true
 
       - name: Upload report
