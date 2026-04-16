@@ -3,6 +3,7 @@ name: Daily Paper Tracker
 on:
   schedule:
     - cron: '0 22 * * *'
+    - cron: '0 10 * * *'
   workflow_dispatch:
 
 jobs:
@@ -35,9 +36,17 @@ jobs:
           "
           python paper_tracker.py
 
+      - name: Save processed records
+        run: |
+          git config user.email "action@github.com"
+          git config user.name "Paper Tracker Bot"
+          git add processed_papers.json || true
+          git diff --staged --quiet || git commit -m "update processed papers [$(date +%Y-%m-%d-%H%M)]"
+          git push || true
+
       - name: Upload report
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: report
+          name: report-${{ github.run_number }}
           path: report.html
