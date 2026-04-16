@@ -24,7 +24,7 @@ jobs:
       - name: Install dependencies
         run: pip install selenium webdriver-manager requests pyyaml
 
-      - name: Run tracker
+     - name: Run tracker
         env:
           FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
           FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
@@ -34,7 +34,25 @@ jobs:
           t = open('config.yaml').read().replace('headless: false','headless: true')
           open('config.yaml','w').write(t)
           "
-          python paper_tracker.py
+          python -c "
+          from selenium import webdriver
+          from selenium.webdriver.common.by import By
+          from selenium.webdriver.chrome.service import Service
+          from selenium.webdriver.chrome.options import Options
+          from webdriver_manager.chrome import ChromeDriverManager
+          import time
+          options = Options()
+          options.add_argument('--headless=new')
+          options.add_argument('--no-sandbox')
+          options.add_argument('--disable-dev-shm-usage')
+          service = Service(ChromeDriverManager().install())
+          driver = webdriver.Chrome(service=service, options=options)
+          driver.get('https://chatpaper.com/zh-CN/search?keywords=GUI+Agent&type=all&sort=date')
+          time.sleep(8)
+          text = driver.find_element(By.TAG_NAME, 'body').text
+          print(text[:2000])
+          driver.quit()
+          "
 
       - name: Save processed records
         run: |
