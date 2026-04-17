@@ -23,7 +23,7 @@ page_check_keywords:
 keyword_threshold: 2
 
 # 查看最近 N 天的论文
-days_lookback: 3
+days_lookback: 1
 
 # 浏览器设置
 headless: false
