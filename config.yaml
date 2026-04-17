@@ -11,12 +11,13 @@ search_keywords:
   - "mobile agent"
   - "computer use"
 
-# 在论文详情页上统计出现次数的关键词（不下载 PDF，直接在网页上检索）
+# 在论文 PDF 页面中检索以下关键词，任意一个出现即计 +1（不区分大小写）
 page_check_keywords:
   - "web agent"
   - "gui agent"
   - "computer use"
   - "mobile agent"
+  - "computer-use"
   - "CUA"
 
 # 关键词出现次数阈值（≥ 此值则录入飞书）
