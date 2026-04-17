@@ -486,8 +486,14 @@ class ChatPaperSearcher:
                 if not check_url:
                     continue
                 logger.info(f"🔎 [{i+1}/{len(papers)}] 检查: {(p.title_en or p.title_zh)[:50]}...")
-                p.keyword_count = self.check_keywords_on_page(check_url)
-                logger.info(f"   关键词 × {p.keyword_count}")
+# 先从标题和摘要中统计关键词
+                title_text = f"{p.title_en} {p.title_zh}".lower()
+                base_count = 0
+                for kw in CONFIG["page_check_keywords"]:
+                    base_count += title_text.count(kw.lower())
+                # 再从详情页统计
+                page_count = self.check_keywords_on_page(check_url)
+                p.keyword_count = base_count + page_count                logger.info(f"   关键词 × {p.keyword_count}")
 
                 if p.keyword_count >= CONFIG["keyword_threshold"]:
                     d = self.extract_details(p.chatpaper_url)
