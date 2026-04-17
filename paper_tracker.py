@@ -493,7 +493,8 @@ class ChatPaperSearcher:
                     base_count += title_text.count(kw.lower())
                 # 再从详情页统计
                 page_count = self.check_keywords_on_page(check_url)
-                p.keyword_count = base_count + page_count                logger.info(f"   关键词 × {p.keyword_count}")
+                p.keyword_count = base_count + page_count
+                logger.info(f"   关键词 × {p.keyword_count}")
 
                 if p.keyword_count >= CONFIG["keyword_threshold"]:
                     d = self.extract_details(p.chatpaper_url)
