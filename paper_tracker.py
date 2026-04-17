@@ -329,18 +329,14 @@ class ChatPaperSearcher:
 
     def check_keywords_on_page(self, paper_dict_or_url) -> int:
         """
-        打开论文的 PDF 页面（或详情页），在页面文本中统计关键词。
-        类似 Ctrl+F 搜索整篇论文。
+        打开论文详情页，等待完全加载，在页面文本中统计关键词。
         """
         from selenium.webdriver.common.by import By
 
-        # 支持传入 Paper 对象或 URL 字符串
         if isinstance(paper_dict_or_url, str):
             url = paper_dict_or_url
-            pdf_url = ""
         else:
             url = paper_dict_or_url
-            pdf_url = ""
 
         if not url:
             return 0
@@ -350,46 +346,64 @@ class ChatPaperSearcher:
             self.driver.switch_to.window(self.driver.window_handles[-1])
             self.driver.get(url)
 
-            # 等待页面完全加载（解决网络延迟问题）
-            for _ in range(15):
+            # 必须等待页面完全加载（最长等60秒）
+            for attempt in range(30):
                 time.sleep(2)
                 state = self.driver.execute_script("return document.readyState")
-                if state == "complete":
+                body_len = len(self.driver.find_element(By.TAG_NAME, "body").text)
+                if state == "complete" and body_len > 500:
                     break
-            time.sleep(3)  # 额外等待动态内容
+            time.sleep(3)
 
             page_text = self.driver.find_element(By.TAG_NAME, "body").text.lower()
+            logger.debug(f"  页面文本长度: {len(page_text)}")
 
-            # 如果详情页文本太少，尝试找 PDF 链接并打开
-            if len(page_text) < 500:
-                logger.debug("  详情页内容较少，尝试查找 PDF...")
-
-            # 尝试在详情页找到 arXiv PDF 链接
+            # 尝试找到并打开 arXiv PDF
             try:
                 pdf_links = self.driver.find_elements(By.CSS_SELECTOR, 'a[href*="arxiv.org/pdf"]')
                 if not pdf_links:
                     pdf_links = self.driver.find_elements(By.CSS_SELECTOR, 'a[href*="arxiv.org/abs"]')
                 if pdf_links:
                     pdf_href = pdf_links[0].get_attribute("href")
-                    # 转换为 PDF 链接
                     if "/abs/" in pdf_href:
                         pdf_href = pdf_href.replace("/abs/", "/pdf/")
                     if pdf_href and pdf_href != url:
-                        logger.debug(f"  打开 PDF: {pdf_href}")
                         self.driver.get(pdf_href)
-                        # PDF 加载需要更多时间
-                        for _ in range(20):
+                        # PDF 需要更多加载时间
+                        for attempt in range(30):
                             time.sleep(2)
                             state = self.driver.execute_script("return document.readyState")
-                            if state == "complete":
+                            body_len = len(self.driver.find_element(By.TAG_NAME, "body").text)
+                            if state == "complete" and body_len > 1000:
                                 break
                         time.sleep(5)
-                        # 获取 PDF 页面文本
                         pdf_text = self.driver.find_element(By.TAG_NAME, "body").text.lower()
                         if len(pdf_text) > len(page_text):
                             page_text = pdf_text
             except Exception as e:
-                logger.debug(f"  PDF 打开失败，使用详情页文本: {e}")
+                logger.debug(f"  PDF打开失败: {e}")
+
+            # 统计关键词
+            total = 0
+            for kw in CONFIG["page_check_keywords"]:
+                count = page_text.count(kw.lower())
+                if count > 0:
+                    logger.debug(f"    '{kw}' x {count}")
+                total += count
+
+            self.driver.close()
+            self.driver.switch_to.window(self.driver.window_handles[0])
+            return total
+
+        except Exception as e:
+            logger.error(f"  页面访问失败: {e}")
+            try:
+                if len(self.driver.window_handles) > 1:
+                    self.driver.close()
+                    self.driver.switch_to.window(self.driver.window_handles[0])
+            except:
+                pass
+            return 0
 
             # 统计关键词
             total = 0
