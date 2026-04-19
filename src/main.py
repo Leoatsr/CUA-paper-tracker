@@ -48,10 +48,18 @@ ARXIV_PDF_URL = "https://arxiv.org/pdf/{arxiv_id}.pdf"
 BJ_TZ = timezone(timedelta(hours=8))
 
 
-def default_target_date() -> date:
-    """默认目标日期 = 北京时间昨天"""
+def default_target_dates() -> list:
+    """默认目标日期 = [北京昨天, 北京前天]（从新到旧）
+
+    两天合采的原因：chatpaper 对海外 IP 有 ~1-2 天数据延迟，
+    采 today-1 保证有最新数据（海外已同步的），
+    采 today-2 兜底（海外肯定已同步），共同保证不漏采。
+    """
     now_bj = datetime.now(BJ_TZ)
-    return (now_bj - timedelta(days=1)).date()
+    return [
+        (now_bj - timedelta(days=1)).date(),  # 昨天
+        (now_bj - timedelta(days=2)).date(),  # 前天
+    ]
 
 
 def parse_date_arg(arg_value: str) -> date:
@@ -60,19 +68,25 @@ def parse_date_arg(arg_value: str) -> date:
 
 async def run_task(
     dry_run: bool = False,
-    target_date: date = None,
+    target_date=None,  # 可传 date（单日）、list[date]（多日），None → default_target_dates()
     keywords: list = None,
 ) -> TaskLog:
     """完整执行一次采集 → 分析 → 录入流程，结束后生成报告
 
+    :param target_date: 单个 date、多个 date 列表，或 None 使用默认（昨天+前天）
     :param keywords: 可选，只跑指定关键词列表（不区分大小写匹配 PRIMARY_KEYWORDS）
                      传 None 则跑全部 6 个关键词
     """
     task_time_utc = datetime.now(timezone.utc)
     task_time_bj = task_time_utc.astimezone(BJ_TZ)
 
+    # 归一化 target_date 为 list[date]
     if target_date is None:
-        target_date = default_target_date()
+        target_dates = default_target_dates()
+    elif isinstance(target_date, date):
+        target_dates = [target_date]
+    else:
+        target_dates = list(target_date)
 
     # 解析 keywords 参数
     if keywords:
@@ -91,7 +105,7 @@ async def run_task(
         f"任务开始: 北京 {task_time_bj:%Y-%m-%d %H:%M:%S} "
         f"/ UTC {task_time_utc:%Y-%m-%d %H:%M:%S}"
     )
-    logger.info(f"目标采集日期: {target_date}")
+    logger.info(f"目标采集日期: {[d.isoformat() for d in target_dates]}")
     logger.info(f"本次运行关键词: {keywords_to_run}")
     logger.info("=" * 60)
 
@@ -107,10 +121,11 @@ async def run_task(
             is_wiki=CONFIG['feishu'].get('is_wiki', False),
         )
 
+    # TaskLog.target_date 取"最新的那天"用于报告标题/文件名；另有详细列表字段
     task_log = TaskLog(
         task_time_bj=task_time_bj,
         task_time_utc=task_time_utc,
-        target_date=target_date,
+        target_date=target_dates[0],
         dry_run=dry_run,
     )
     processed_set = set()
@@ -120,162 +135,170 @@ async def run_task(
             logger.info(f"━━━━━━ 关键词: {keyword} ━━━━━━")
             ks = KeywordStats(keyword=keyword)
             try:
-                async for paper in scraper.collect_for_date(keyword, target_date):
-                    ks.cards_seen += 1
+                for td in target_dates:
+                    logger.info(f"  → 采集日期 {td}")
+                    async for paper in scraper.collect_for_date(keyword, td):
+                        ks.cards_seen += 1
 
-                    # 跨关键词 / 跨任务去重
-                    if paper.arxiv_id in processed_set or history.contains(paper.arxiv_id):
-                        logger.debug(f"跳过（已处理）: {paper.arxiv_id}")
-                        ks.deduped += 1
-                        continue
+                        # 跨关键词 / 跨任务去重
+                        if paper.arxiv_id in processed_set or history.contains(paper.arxiv_id):
+                            logger.debug(f"跳过（已处理）: {paper.arxiv_id}")
+                            ks.deduped += 1
+                            continue
 
-                    processed_set.add(paper.arxiv_id)
-                    paper.matched_keyword = keyword
+                        processed_set.add(paper.arxiv_id)
+                        paper.matched_keyword = keyword
 
-                    # PDF 下载与分析
-                    pdf_url = ARXIV_PDF_URL.format(arxiv_id=paper.arxiv_id)
-                    pdf_bytes = await download_pdf(pdf_url, timeout=180)
-                    if pdf_bytes is None:
-                        paper.pdf_timeout = True
-                        task_log.timeout_queue.append(paper.arxiv_id)
-                        ks.timeout += 1
-                        task_log.records.append(PaperRecord(
-                            arxiv_id=paper.arxiv_id,
-                            arxiv_url=paper.arxiv_url,
-                            title_zh=paper.title_zh,
-                            title_en=paper.title_en,
-                            matched_keyword=keyword,
-                            institutions=paper.institutions,
-                            status='timeout',
-                        ))
-                        logger.warning(f"PDF 超时 → timeout_queue: {paper.arxiv_id}")
-                        continue
-
-                    try:
-                        pdf_info = analyze_pdf(pdf_bytes)
-                        paper.web_agent_count = pdf_info['web_agent_count']
-                        paper.gui_agent_count = pdf_info['gui_agent_count']
-                        if pdf_info.get('arxiv_date'):
-                            paper.date = pdf_info['arxiv_date']
-                        if pdf_info.get('project_url') and not paper.project_url:
-                            paper.project_url = pdf_info['project_url']
-                    except Exception as e:
-                        logger.error(f"PDF 分析失败 {paper.arxiv_id}: {e}")
-                        continue
-
-                    # 命中过滤
-                    total_hits = paper.web_agent_count + paper.gui_agent_count
-                    if total_hits < 1:
-                        ks.filtered += 1
-                        task_log.records.append(PaperRecord(
-                            arxiv_id=paper.arxiv_id,
-                            arxiv_url=paper.arxiv_url,
-                            title_zh=paper.title_zh,
-                            title_en=paper.title_en,
-                            matched_keyword=keyword,
-                            web_agent_count=paper.web_agent_count,
-                            gui_agent_count=paper.gui_agent_count,
-                            institutions=paper.institutions,
-                            status='filtered',
-                        ))
-                        logger.info(
-                            f"⊘ 跳过（未命中关键词）: {paper.arxiv_id} | "
-                            f"web_agent={paper.web_agent_count} | "
-                            f"gui_agent={paper.gui_agent_count} | "
-                            f"标题={paper.title_zh[:30]}"
-                        )
-                        if not dry_run:
-                            history.add(paper.arxiv_id)
-                        continue
-
-                    # DRY-RUN 分支
-                    if dry_run:
-                        ks.recorded += 1
-                        task_log.papers_processed.append(paper.arxiv_id)
-                        task_log.records.append(PaperRecord(
-                            arxiv_id=paper.arxiv_id,
-                            arxiv_url=paper.arxiv_url,
-                            title_zh=paper.title_zh,
-                            title_en=paper.title_en,
-                            matched_keyword=keyword,
-                            web_agent_count=paper.web_agent_count,
-                            gui_agent_count=paper.gui_agent_count,
-                            institutions=paper.institutions,
-                            status='recorded',
-                        ))
-                        logger.success(
-                            f"[DRY-RUN] ✓ {paper.arxiv_id} | "
-                            f"web_agent={paper.web_agent_count} | "
-                            f"gui_agent={paper.gui_agent_count} | "
-                            f"命中={keyword} | "
-                            f"中文标题={paper.title_zh[:40]}..."
-                        )
-                        continue
-
-                    # 写飞书
-                    try:
-                        if feishu.exists(paper.arxiv_url):
-                            task_log.feishu_skipped.append(paper.arxiv_id)
-                            ks.feishu_skipped += 1
-                            history.add(paper.arxiv_id)
+                        # PDF 下载与分析
+                        pdf_url = ARXIV_PDF_URL.format(arxiv_id=paper.arxiv_id)
+                        pdf_bytes = await download_pdf(pdf_url, timeout=180)
+                        if pdf_bytes is None:
+                            paper.pdf_timeout = True
+                            task_log.timeout_queue.append(paper.arxiv_id)
+                            ks.timeout += 1
                             task_log.records.append(PaperRecord(
                                 arxiv_id=paper.arxiv_id,
                                 arxiv_url=paper.arxiv_url,
+                                chatpaper_url=paper.chatpaper_url,
+                                title_zh=paper.title_zh,
+                                title_en=paper.title_en,
+                                matched_keyword=keyword,
+                                institutions=paper.institutions,
+                                status='timeout',
+                            ))
+                            logger.warning(f"PDF 超时 → timeout_queue: {paper.arxiv_id}")
+                            continue
+
+                        try:
+                            pdf_info = analyze_pdf(pdf_bytes)
+                            paper.web_agent_count = pdf_info['web_agent_count']
+                            paper.gui_agent_count = pdf_info['gui_agent_count']
+                            if pdf_info.get('arxiv_date'):
+                                paper.date = pdf_info['arxiv_date']
+                            if pdf_info.get('project_url') and not paper.project_url:
+                                paper.project_url = pdf_info['project_url']
+                        except Exception as e:
+                            logger.error(f"PDF 分析失败 {paper.arxiv_id}: {e}")
+                            continue
+
+                        # 命中过滤
+                        total_hits = paper.web_agent_count + paper.gui_agent_count
+                        if total_hits < 1:
+                            ks.filtered += 1
+                            task_log.records.append(PaperRecord(
+                                arxiv_id=paper.arxiv_id,
+                                arxiv_url=paper.arxiv_url,
+                                chatpaper_url=paper.chatpaper_url,
                                 title_zh=paper.title_zh,
                                 title_en=paper.title_en,
                                 matched_keyword=keyword,
                                 web_agent_count=paper.web_agent_count,
                                 gui_agent_count=paper.gui_agent_count,
                                 institutions=paper.institutions,
-                                status='feishu_skipped',
+                                status='filtered',
                             ))
-                            logger.info(f"飞书已存在，跳过: {paper.arxiv_id}")
+                            logger.info(
+                                f"⊘ 跳过（未命中关键词）: {paper.arxiv_id} | "
+                                f"web_agent={paper.web_agent_count} | "
+                                f"gui_agent={paper.gui_agent_count} | "
+                                f"标题={paper.title_zh[:30]}"
+                            )
+                            if not dry_run:
+                                history.add(paper.arxiv_id)
                             continue
 
-                        image_token = None
-                        if paper.image_url:
-                            image_token = await feishu.upload_image_from_url(paper.image_url)
+                        # DRY-RUN 分支
+                        if dry_run:
+                            ks.recorded += 1
+                            task_log.papers_processed.append(paper.arxiv_id)
+                            task_log.records.append(PaperRecord(
+                                arxiv_id=paper.arxiv_id,
+                                arxiv_url=paper.arxiv_url,
+                                chatpaper_url=paper.chatpaper_url,
+                                title_zh=paper.title_zh,
+                                title_en=paper.title_en,
+                                matched_keyword=keyword,
+                                web_agent_count=paper.web_agent_count,
+                                gui_agent_count=paper.gui_agent_count,
+                                institutions=paper.institutions,
+                                status='recorded',
+                            ))
+                            logger.success(
+                                f"[DRY-RUN] ✓ {paper.arxiv_id} | "
+                                f"web_agent={paper.web_agent_count} | "
+                                f"gui_agent={paper.gui_agent_count} | "
+                                f"命中={keyword} | "
+                                f"中文标题={paper.title_zh[:40]}..."
+                            )
+                            continue
 
-                        feishu.insert(paper, image_token=image_token)
-                        history.add(paper.arxiv_id)
-                        task_log.papers_processed.append(paper.arxiv_id)
-                        ks.recorded += 1
-                        task_log.records.append(PaperRecord(
-                            arxiv_id=paper.arxiv_id,
-                            arxiv_url=paper.arxiv_url,
-                            title_zh=paper.title_zh,
-                            title_en=paper.title_en,
-                            matched_keyword=keyword,
-                            web_agent_count=paper.web_agent_count,
-                            gui_agent_count=paper.gui_agent_count,
-                            institutions=paper.institutions,
-                            status='recorded',
-                        ))
-                        logger.success(
-                            f"✓ 录入 {paper.arxiv_id} | "
-                            f"web_agent={paper.web_agent_count} | "
-                            f"gui_agent={paper.gui_agent_count} | "
-                            f"命中={keyword}"
-                        )
-                    except Exception as e:
-                        task_log.feishu_failed.append({
-                            'arxiv_id': paper.arxiv_id,
-                            'error': str(e),
-                        })
-                        ks.feishu_failed += 1
-                        task_log.records.append(PaperRecord(
-                            arxiv_id=paper.arxiv_id,
-                            arxiv_url=paper.arxiv_url,
-                            title_zh=paper.title_zh,
-                            title_en=paper.title_en,
-                            matched_keyword=keyword,
-                            web_agent_count=paper.web_agent_count,
-                            gui_agent_count=paper.gui_agent_count,
-                            institutions=paper.institutions,
-                            status='feishu_failed',
-                            error=str(e),
-                        ))
-                        logger.error(f"飞书录入失败 {paper.arxiv_id}: {e}")
+                        # 写飞书
+                        try:
+                            if feishu.exists(paper.arxiv_url):
+                                task_log.feishu_skipped.append(paper.arxiv_id)
+                                ks.feishu_skipped += 1
+                                history.add(paper.arxiv_id)
+                                task_log.records.append(PaperRecord(
+                                    arxiv_id=paper.arxiv_id,
+                                    arxiv_url=paper.arxiv_url,
+                                    chatpaper_url=paper.chatpaper_url,
+                                    title_zh=paper.title_zh,
+                                    title_en=paper.title_en,
+                                    matched_keyword=keyword,
+                                    web_agent_count=paper.web_agent_count,
+                                    gui_agent_count=paper.gui_agent_count,
+                                    institutions=paper.institutions,
+                                    status='feishu_skipped',
+                                ))
+                                logger.info(f"飞书已存在，跳过: {paper.arxiv_id}")
+                                continue
+
+                            image_token = None
+                            if paper.image_url:
+                                image_token = await feishu.upload_image_from_url(paper.image_url)
+
+                            feishu.insert(paper, image_token=image_token)
+                            history.add(paper.arxiv_id)
+                            task_log.papers_processed.append(paper.arxiv_id)
+                            ks.recorded += 1
+                            task_log.records.append(PaperRecord(
+                                arxiv_id=paper.arxiv_id,
+                                arxiv_url=paper.arxiv_url,
+                                chatpaper_url=paper.chatpaper_url,
+                                title_zh=paper.title_zh,
+                                title_en=paper.title_en,
+                                matched_keyword=keyword,
+                                web_agent_count=paper.web_agent_count,
+                                gui_agent_count=paper.gui_agent_count,
+                                institutions=paper.institutions,
+                                status='recorded',
+                            ))
+                            logger.success(
+                                f"✓ 录入 {paper.arxiv_id} | "
+                                f"web_agent={paper.web_agent_count} | "
+                                f"gui_agent={paper.gui_agent_count} | "
+                                f"命中={keyword}"
+                            )
+                        except Exception as e:
+                            task_log.feishu_failed.append({
+                                'arxiv_id': paper.arxiv_id,
+                                'error': str(e),
+                            })
+                            ks.feishu_failed += 1
+                            task_log.records.append(PaperRecord(
+                                arxiv_id=paper.arxiv_id,
+                                arxiv_url=paper.arxiv_url,
+                                chatpaper_url=paper.chatpaper_url,
+                                title_zh=paper.title_zh,
+                                title_en=paper.title_en,
+                                matched_keyword=keyword,
+                                web_agent_count=paper.web_agent_count,
+                                gui_agent_count=paper.gui_agent_count,
+                                institutions=paper.institutions,
+                                status='feishu_failed',
+                                error=str(e),
+                            ))
+                            logger.error(f"飞书录入失败 {paper.arxiv_id}: {e}")
 
             except Exception as e:
                 logger.exception(f"关键词 '{keyword}' 采集异常: {e}")
@@ -290,7 +313,7 @@ async def run_task(
 
     logger.info("=" * 60)
     logger.info(
-        f"任务结束 | 目标日期 {target_date} | "
+        f"任务结束 | 目标日期 {[d.isoformat() for d in target_dates]} | "
         f"录入 {len(task_log.papers_processed)} | "
         f"超时 {len(task_log.timeout_queue)} | "
         f"跳过 {len(task_log.feishu_skipped)} | "

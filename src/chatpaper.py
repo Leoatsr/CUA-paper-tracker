@@ -274,6 +274,7 @@ class ChatPaperScraper:
                 abstract_zh=abstract_zh,
                 image_url=image_url,
                 project_url=project_url,
+                chatpaper_url=meta['detail_url'],
             )
         except Exception as e:
             logger.error(f"详情页解析失败 {meta['detail_url']}: {e}")

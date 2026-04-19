@@ -16,6 +16,7 @@ class Paper(BaseModel):
     core_points: str = ""
     abstract_zh: str = ""
     image_url: Optional[str] = None
+    chatpaper_url: Optional[str] = None   # chatpaper 详情页 URL（报告里展示链接用）
     matched_keyword: Optional[str] = None
     web_agent_count: int = 0
     gui_agent_count: int = 0
@@ -26,6 +27,7 @@ class PaperRecord(BaseModel):
     """报告里每条论文的明细。既能描述成功录入的，也能描述过滤/超时的。"""
     arxiv_id: str
     arxiv_url: str = ""
+    chatpaper_url: Optional[str] = None
     title_zh: str = ""
     title_en: str = ""
     matched_keyword: Optional[str] = None

@@ -2,8 +2,8 @@ name: Daily Paper Tracker
 
 on:
   schedule:
-    # UTC 14:00 = 北京时间 22:00（GitHub Actions cron 可能延迟 5-30 分钟）
-    - cron: '0 14 * * *'
+    # UTC 17:30 = 北京次日 01:30（凌晨冷门时段，GitHub Actions 延迟最小）
+    - cron: '30 17 * * *'
   workflow_dispatch:
     inputs:
       target_date:

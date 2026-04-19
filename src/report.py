@@ -355,7 +355,7 @@ def _render_html(task_log: TaskLog) -> str:
           <td><span class="count-badge count-web">{r.web_agent_count}</span></td>
           <td><span class="count-badge count-gui">{r.gui_agent_count}</span></td>
           <td class="institutions">{_html_escape("; ".join(r.institutions))}</td>
-          <td><a class="link-btn" href="{_html_escape(r.arxiv_url)}" target="_blank">arXiv →</a></td>
+          <td><a class="link-btn" href="{_html_escape(r.chatpaper_url or r.arxiv_url)}" target="_blank">ChatPaper →</a></td>
         </tr>
 ''')
         html_parts.append('      </tbody>\n    </table>\n')

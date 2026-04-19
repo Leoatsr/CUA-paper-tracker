@@ -1,7 +1,7 @@
 """
 定时调度
 
-北京时间每日 22:00 触发一次（采集北京时间前一天发布的论文）。
+北京时间每日 01:30 触发一次（采集北京前一天、前两天两天发布的论文）。
 """
 import pytz
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -9,7 +9,7 @@ from apscheduler.triggers.cron import CronTrigger
 from loguru import logger
 
 BJ_TZ = pytz.timezone('Asia/Shanghai')
-DEFAULT_TIMES = [(22, 0)]  # 北京时间 22:00
+DEFAULT_TIMES = [(1, 30)]  # 北京时间 01:30（凌晨，冷门时段延迟小）
 
 
 def create_scheduler(async_job, times=None):
