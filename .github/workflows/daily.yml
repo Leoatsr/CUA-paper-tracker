@@ -2,52 +2,229 @@ name: Daily Paper Tracker
 
 on:
   schedule:
-    - cron: '0 22 * * *'
-    - cron: '0 10 * * *'
+    # UTC 14:00 = 北京时间 22:00（GitHub Actions cron 可能延迟 5-30 分钟）
+    - cron: '0 14 * * *'
   workflow_dispatch:
+    inputs:
+      target_date:
+        description: '目标日期 YYYY-MM-DD（留空则取北京昨日）'
+        required: false
+        default: ''
+      keywords:
+        description: '指定关键词，逗号分隔（留空则跑全部 6 个）'
+        required: false
+        default: ''
+      dry_run:
+        description: 'DRY-RUN 模式（不写飞书）'
+        type: boolean
+        required: false
+        default: false
+
+# 保证同时只有一个任务在跑，避免重复
+concurrency:
+  group: paper-tracker
+  cancel-in-progress: false
 
 jobs:
-  track:
+  run:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    # 允许写仓库和 gh-pages 分支
+    permissions:
+      contents: write
+
     steps:
-      - uses: actions/checkout@v4
+      # ── 1. 拉取代码（main 分支，含 data/history.json）
+      - name: Checkout main
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      # ── 2. 配 Python
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
+          cache: 'pip'
 
-      - name: Install Chrome
+      # ── 3. 装依赖
+      - name: Install Python dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y google-chrome-stable
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-      - name: Install dependencies
-        run: pip install selenium webdriver-manager requests pyyaml
+      # ── 4. 装 Playwright + 浏览器
+      - name: Install Playwright Chromium
+        run: |
+          python -m playwright install --with-deps chromium
 
-      - name: Run tracker
+      # ── 5. 写配置文件（从 Secrets 注入，不提交到仓库）
+      - name: Generate config files
         env:
           FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
           FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
-          FEISHU_WIKI_TOKEN: ${{ secrets.FEISHU_WIKI_TOKEN }}
-          TZ: Asia/Shanghai
+          FEISHU_APP_TOKEN: ${{ secrets.FEISHU_APP_TOKEN }}
+          FEISHU_TABLE_ID: ${{ secrets.FEISHU_TABLE_ID }}
         run: |
-          python -c "
-          t = open('config.yaml').read().replace('headless: false','headless: true')
-          open('config.yaml','w').write(t)
-          "
-          python paper_tracker.py
+          # 生成 .env
+          cat > .env <<EOF
+          FEISHU_APP_ID=${FEISHU_APP_ID}
+          FEISHU_APP_SECRET=${FEISHU_APP_SECRET}
+          FEISHU_APP_TOKEN=${FEISHU_APP_TOKEN}
+          FEISHU_TABLE_ID=${FEISHU_TABLE_ID}
+          CONFIG_PATH=config/config.yaml
+          EOF
 
-      - name: Save processed records
+          # 生成 config.yaml (headless 必须为 true, Actions 无显示器)
+          mkdir -p config
+          cat > config/config.yaml <<'EOF'
+          headless: true
+          history_path: "data/history.json"
+          log_dir: "data/logs"
+          report_dir: "data/reports"
+          feishu:
+            is_wiki: true
+            field_mapping:
+              论文: "论文"
+              标题: "标题"
+              机构: "机构"
+              日期: "日期"
+              作者: "作者"
+              arxiv: "arxiv"
+              project: "project"
+              概要: "概要"
+              简介: "简介"
+              图片: "图片"
+          EOF
+
+      # ── 6. 确保历史文件存在
+      - name: Initialize history.json if missing
         run: |
-          git config user.email "action@github.com"
-          git config user.name "Paper Tracker Bot"
-          git add processed_papers.json || true
-          git diff --staged --quiet || git commit -m "update processed [$(date +%Y-%m-%d-%H%M)]"
-          git push || true
+          mkdir -p data data/reports data/logs
+          if [ ! -f data/history.json ]; then
+            echo '[]' > data/history.json
+          fi
 
-      - name: Upload report
-        uses: actions/upload-artifact@v4
+      # ── 7. 跑主任务
+      - name: Run paper tracker
+        env:
+          TARGET_DATE: ${{ github.event.inputs.target_date }}
+          KEYWORDS: ${{ github.event.inputs.keywords }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: |
+          ARGS="--once"
+
+          if [ -n "$TARGET_DATE" ]; then
+            ARGS="$ARGS --date $TARGET_DATE"
+          fi
+
+          if [ -n "$KEYWORDS" ]; then
+            ARGS="$ARGS --keywords \"$KEYWORDS\""
+          fi
+
+          if [ "$DRY_RUN" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+
+          echo "运行: python -m src.main $ARGS"
+          eval "python -m src.main $ARGS"
+
+      # ── 8. 上传本次报告为 workflow artifact（7 天保留，方便调试）
+      - name: Upload report as artifact
         if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: report-${{ github.run_number }}
-          path: report.html
+          name: report-${{ github.run_id }}
+          path: |
+            data/reports/
+            data/logs/
+          retention-days: 7
+
+      # ── 9. 把更新的 history.json commit 回 main
+      - name: Commit history.json
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/history.json
+          if git diff --staged --quiet; then
+            echo "history.json 无变化，跳过 commit"
+          else
+            git commit -m "chore: update history.json [skip ci]"
+            git push
+          fi
+
+      # ── 10. 发布报告到 gh-pages 分支（GitHub Pages 会自动从 gh-pages 分支发布）
+      - name: Publish report to gh-pages
+        if: success()
+        run: |
+          # 收集所有 HTML 报告到一个临时目录
+          mkdir -p /tmp/pages-out
+          if [ -d data/reports ]; then
+            cp -r data/reports/*.html /tmp/pages-out/ 2>/dev/null || true
+          fi
+
+          # 克隆 gh-pages 分支（若不存在则创建）
+          cd /tmp
+          git clone --depth 1 --branch gh-pages "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" pages-repo 2>/dev/null \
+            || (
+              git clone --depth 1 "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" pages-repo \
+              && cd pages-repo \
+              && git checkout --orphan gh-pages \
+              && git rm -rf . \
+              && cd ..
+            )
+
+          cd pages-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # 拷新报告
+          cp /tmp/pages-out/*.html ./ 2>/dev/null || true
+
+          # 生成/更新 index.html（列出所有可用报告）
+          python3 <<'PYEOF'
+          import os
+          import glob
+          from datetime import datetime
+
+          reports = sorted(glob.glob("report_*.html"), reverse=True)
+          links = "\n".join(
+              f'  <li><a href="{r}">{r.replace("report_", "").replace(".html", "")}</a></li>'
+              for r in reports
+          )
+          html = f"""<!DOCTYPE html>
+          <html lang="zh-CN"><head><meta charset="UTF-8"><title>论文追踪报告索引</title>
+          <style>
+            body {{ font-family: -apple-system, "PingFang SC", sans-serif;
+                   max-width: 720px; margin: 40px auto; padding: 24px;
+                   background: #f6f8fd; color: #2d3748; }}
+            h1 {{ color: #5b21b6; }}
+            ul {{ list-style: none; padding: 0; }}
+            li {{ padding: 10px 16px; background: white; margin: 8px 0;
+                 border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); }}
+            a {{ color: #6366f1; text-decoration: none; font-weight: 500; }}
+            a:hover {{ text-decoration: underline; }}
+            .meta {{ color: #94a3b8; font-size: 12px; }}
+          </style></head>
+          <body>
+            <h1>📑 论文追踪报告</h1>
+            <p class="meta">最后更新: {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC</p>
+            <ul>
+          {links}
+            </ul>
+          </body></html>
+          """
+          with open("index.html", "w", encoding="utf-8") as f:
+              f.write(html)
+          PYEOF
+
+          # 避免 Jekyll 对 HTML 做处理
+          touch .nojekyll
+
+          git add -A
+          if git diff --staged --quiet; then
+            echo "gh-pages 无变化"
+          else
+            git commit -m "Deploy report $(date -u +%Y-%m-%d)"
+            git push origin gh-pages
+          fi

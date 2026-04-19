@@ -1,23 +1,41 @@
-# Secrets
+# 凭证 - 绝对不能提交
 .env
+.env.local
+.env.*.local
 
-# Runtime data
-paper_tracker.log
-processed_papers.json
-cron.log
+# 配置（云端 workflow 会从 Secrets 注入生成）
+config/config.yaml
+
+# 虚拟环境
+venv/
+.venv/
+env/
+ENV/
 
 # Python
 __pycache__/
 *.py[cod]
+*$py.class
+*.so
+.Python
 *.egg-info/
-dist/
-build/
-venv/
-.venv/
+.pytest_cache/
+
+# 数据（history.json 例外，工作流会 commit）
+data/logs/
+data/dump/
+data/reports/
 
 # IDE
-.vscode/
 .idea/
+.vscode/
 *.swp
 *.swo
+
+# OS
 .DS_Store
+Thumbs.db
+
+# 测试产物
+/tmp/
+sample_report.html
