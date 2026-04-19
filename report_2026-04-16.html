@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>论文追踪报告 - 2026-04-16</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(180deg, #f6f8fd 0%, #eef1f9 100%);
+    color: #2d3748;
+    min-height: 100vh;
+    padding: 24px;
+  }
+  .container { max-width: 1280px; margin: 0 auto; }
+
+  /* 顶部 Header */
+  .header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 28px 32px;
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(102, 126, 234, 0.25);
+    margin-bottom: 24px;
+  }
+  .header h1 { font-size: 24px; margin-bottom: 6px; font-weight: 700; }
+  .header .subtitle { font-size: 14px; opacity: 0.9; }
+  .header .dry-run-badge {
+    display: inline-block;
+    background: #fbbf24;
+    color: #1f2937;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    margin-left: 8px;
+    font-weight: 600;
+  }
+
+  /* 顶部大卡片 */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .stat-card {
+    background: white;
+    padding: 20px;
+    border-radius: 14px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s;
+  }
+  .stat-card:hover { transform: translateY(-2px); }
+  .stat-card .label {
+    font-size: 13px;
+    color: #64748b;
+    margin-bottom: 8px;
+    font-weight: 500;
+  }
+  .stat-card .value {
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+  .stat-card .accent {
+    position: absolute;
+    top: 0; right: 0;
+    width: 60px; height: 60px;
+    border-radius: 0 14px 0 60px;
+    opacity: 0.12;
+  }
+  .stat-card.primary .value { color: #6366f1; }
+  .stat-card.primary .accent { background: #6366f1; }
+  .stat-card.success .value { color: #10b981; }
+  .stat-card.success .accent { background: #10b981; }
+  .stat-card.warn .value { color: #f59e0b; }
+  .stat-card.warn .accent { background: #f59e0b; }
+  .stat-card.danger .value { color: #ef4444; }
+  .stat-card.danger .accent { background: #ef4444; }
+  .stat-card.gray .value { color: #64748b; }
+  .stat-card.gray .accent { background: #64748b; }
+
+  /* 区块 */
+  .section {
+    background: white;
+    border-radius: 14px;
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  }
+  .section h2 {
+    font-size: 17px;
+    margin-bottom: 16px;
+    color: #1e293b;
+    border-left: 4px solid #6366f1;
+    padding-left: 12px;
+  }
+
+  /* Chart */
+  .chart-wrapper { position: relative; height: 340px; }
+
+  /* 表格 */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    background: #f1f5f9;
+    padding: 10px 12px;
+    text-align: left;
+    color: #475569;
+    font-weight: 600;
+    border-bottom: 2px solid #e2e8f0;
+  }
+  tbody td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: top;
+  }
+  tbody tr:hover { background: #f8fafc; }
+  .arxiv-id { font-family: "SF Mono", Consolas, monospace; color: #6366f1; }
+  .title-zh { font-weight: 500; color: #1e293b; max-width: 300px; }
+  .title-en { font-size: 12px; color: #64748b; margin-top: 2px; max-width: 300px; }
+  .keyword-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    background: #ede9fe;
+    color: #6d28d9;
+    font-weight: 500;
+  }
+  .count-badge {
+    display: inline-block;
+    min-width: 32px;
+    padding: 2px 6px;
+    text-align: center;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .count-web { background: #dbeafe; color: #1d4ed8; }
+  .count-gui { background: #dcfce7; color: #15803d; }
+  .institutions { font-size: 12px; color: #64748b; max-width: 240px; }
+  .link-btn {
+    color: #6366f1;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .link-btn:hover { text-decoration: underline; }
+
+  /* 空状态 */
+  .empty {
+    text-align: center;
+    padding: 32px;
+    color: #94a3b8;
+    font-size: 13px;
+  }
+
+  /* 错误消息 */
+  .error-box {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: "SF Mono", Consolas, monospace;
+    margin-top: 4px;
+  }
+
+  /* 折叠表格 */
+  details { margin-top: 8px; }
+  details summary {
+    cursor: pointer;
+    padding: 10px 14px;
+    background: #f8fafc;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #475569;
+    list-style: none;
+    user-select: none;
+  }
+  details summary::before { content: "▶ "; font-size: 10px; color: #94a3b8; }
+  details[open] summary::before { content: "▼ "; }
+  details[open] summary { background: #ede9fe; color: #6d28d9; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <h1>📑 论文追踪报告
+      
+    </h1>
+    <div class="subtitle">
+      目标采集日期 <strong>2026-04-16</strong>
+      · 执行时间 2026-04-19 14:15:33 (北京时间)
+    </div>
+  </div>
+
+  <!-- 统计卡片 -->
+  <div class="stat-grid">
+    <div class="stat-card primary">
+      <div class="accent"></div>
+      <div class="label">采集总数</div>
+      <div class="value">59</div>
+    </div>
+    <div class="stat-card success">
+      <div class="accent"></div>
+      <div class="label">命中录入</div>
+      <div class="value">4</div>
+    </div>
+    <div class="stat-card gray">
+      <div class="accent"></div>
+      <div class="label">未命中过滤</div>
+      <div class="value">55</div>
+    </div>
+    <div class="stat-card warn">
+      <div class="accent"></div>
+      <div class="label">PDF 超时</div>
+      <div class="value">0</div>
+    </div>
+    <div class="stat-card gray">
+      <div class="accent"></div>
+      <div class="label">飞书已有</div>
+      <div class="value">0</div>
+    </div>
+    <div class="stat-card danger">
+      <div class="accent"></div>
+      <div class="label">飞书失败</div>
+      <div class="value">0</div>
+    </div>
+  </div>
+
+  <!-- Chart -->
+  <div class="section">
+    <h2>关键词分布</h2>
+    <div class="chart-wrapper">
+      <canvas id="kwChart"></canvas>
+    </div>
+  </div>
+
+  <!-- 录入明细 -->
+  <div class="section">
+    <h2>✓ 录入明细 (4 篇)</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>arXiv</th>
+          <th>标题</th>
+          <th>命中</th>
+          <th>web_agent</th>
+          <th>gui_agent</th>
+          <th>机构</th>
+          <th style="width:90px">链接</th>
+        </tr>
+      </thead>
+      <tbody>
+
+        <tr>
+          <td class="arxiv-id">2604.14262</td>
+          <td>
+            <div class="title-zh">GUI扰动：领域随机化揭示了GUI基础模型的系统脆弱性</div>
+            <div class="title-en">GUI-Perturbed: Domain Randomization Reveals Systematic Brittleness in GUI Grounding Models</div>
+          </td>
+          <td><span class="keyword-tag">GUI Agent</span></td>
+          <td><span class="count-badge count-web">2</span></td>
+          <td><span class="count-badge count-gui">7</span></td>
+          <td class="institutions">Fig2Manifold Research</td>
+          <td><a class="link-btn" href="https://arxiv.org/abs/2604.14262" target="_blank">arXiv →</a></td>
+        </tr>
+
+        <tr>
+          <td class="arxiv-id">2604.15309</td>
+          <td>
+            <div class="title-zh">MM-WebAgent：一种用于网页生成的层次化多模态网络代理</div>
+            <div class="title-en">MM-WebAgent: A Hierarchical Multimodal Web Agent for Webpage Generation</div>
+          </td>
+          <td><span class="keyword-tag">GUI Agent</span></td>
+          <td><span class="count-badge count-web">74</span></td>
+          <td><span class="count-badge count-gui">0</span></td>
+          <td class="institutions">Shanghai Jiao Tong University; Xi’an Jiaotong University; Tongji University; Microsoft Corporation</td>
+          <td><a class="link-btn" href="https://arxiv.org/abs/2604.15309" target="_blank">arXiv →</a></td>
+        </tr>
+
+        <tr>
+          <td class="arxiv-id">2604.14518</td>
+          <td>
+            <div class="title-zh">Mind DeepResearch 技术报告</div>
+            <div class="title-en">Mind DeepResearch Technical Report</div>
+          </td>
+          <td><span class="keyword-tag">GUI Agent</span></td>
+          <td><span class="count-badge count-web">2</span></td>
+          <td><span class="count-badge count-gui">0</span></td>
+          <td class="institutions">Li Auto Inc</td>
+          <td><a class="link-btn" href="https://arxiv.org/abs/2604.14518" target="_blank">arXiv →</a></td>
+        </tr>
+
+        <tr>
+          <td class="arxiv-id">2604.15093</td>
+          <td>
+            <div class="title-zh">OpenMobile：构建开放移动代理的任务与轨迹合成</div>
+            <div class="title-en">OpenMobile: Building Open Mobile Agents with Task and Trajectory Synthesis</div>
+          </td>
+          <td><span class="keyword-tag">GUI Agent</span></td>
+          <td><span class="count-badge count-web">6</span></td>
+          <td><span class="count-badge count-gui">17</span></td>
+          <td class="institutions">Nanjing University; SenseTime; Nanyang Technological University; Shanghai AI Laboratory; The University of Hong Kong; Xi’an Jiaotong University</td>
+          <td><a class="link-btn" href="https://arxiv.org/abs/2604.15093" target="_blank">arXiv →</a></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 过滤明细（折叠）-->
+  <div class="section">
+    <h2>⊘ 未命中过滤 (55 篇)</h2>
+    <details>
+      <summary>展开查看全部 55 篇未命中关键词的论文</summary>
+      <table style="margin-top:12px">
+        <thead><tr><th>arXiv</th><th>标题</th><th>web_agent</th><th>gui_agent</th></tr></thead>
+        <tbody>
+
+          <tr>
+            <td class="arxiv-id">2604.15034</td>
+            <td><div class="title-zh">自生性：自我进化代理协议</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14455</td>
+            <td><div class="title-zh">AIBuildAI：一个用于自动构建AI模型的AI代理</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.15184</td>
+            <td><div class="title-zh">代理辅助设计动态CAD模型</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14512</td>
+            <td><div class="title-zh">CBCL：安全自我扩展代理通信</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14609</td>
+            <td><div class="title-zh">锻造代理：基于任务驱动的量子模拟代理生成</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14972</td>
+            <td><div class="title-zh">SAGER：自我进化的用户政策技能用于推荐代理</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14655</td>
+            <td><div class="title-zh">AgentGA：在代理种子空间中演化的代码解决方案</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14386</td>
+            <td><div class="title-zh">大型语言模型代理网络中的联盟形成：稳定性分析与收敛保证</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14564</td>
+            <td><div class="title-zh">MARS
+: 通过强化学习扩展多智能体树搜索用于代码生成</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.15044</td>
+            <td><div class="title-zh">CoGrid与多用户健身房：多智能体实验的框架</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14661</td>
+            <td><div class="title-zh">AIPC：基于代理的自动化用于与高通AI运行时的AI模型部署</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14572</td>
+            <td><div class="title-zh">不检索，导航：将企业知识提炼为可导航的代理技能，以用于质量保证和检索增强生成</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.15078</td>
+            <td><div class="title-zh">人类在哪里？多智能体人工智能系统公平性的范围评估综述</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14691</td>
+            <td><div class="title-zh">CAMO：一种用于从微观行为到宏观涌现的自动因果发现的代理框架，在大型语言模型代理模拟中应用</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14228</td>
+            <td><div class="title-zh">深入探讨Claude Code：当今及未来人工智能代理系统的设计空间</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14687</td>
+            <td><div class="title-zh">M2-PALE：一种通过过程挖掘和大型语言模型解释多智能体蒙特卡洛树搜索-极小极大混合的方法框架</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14399</td>
+            <td><div class="title-zh">SpaceMind：一个模块化和自我演化的具身视觉-语言代理框架，用于自主在轨服务</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14160</td>
+            <td><div class="title-zh">NuHF爪：一种风险约束的认知代理框架，用于数字核控制室中的以人为本的程序支持</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.15231</td>
+            <td><div class="title-zh">RadAgent：一种用于逐步解读胸部计算机断层扫描的工具使用人工智能代理</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14786</td>
+            <td><div class="title-zh">CogEvolution：一种类人生成教育代理，用于模拟学生的认知演变</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14550</td>
+            <td><div class="title-zh">VeriGraphi：一种用于大型硬件设计的分层RTL生成的多智能体框架</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14510</td>
+            <td><div class="title-zh">NewsTorch：一个基于PyTorch的面向学习者的新闻推荐工具包</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.15082</td>
+            <td><div class="title-zh">EDA工具的自主演化：多智能体自我演化的ABC</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14984</td>
+            <td><div class="title-zh">规模化的代理可解释性：在企业恐惧与可解释人工智能需求之间</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14165</td>
+            <td><div class="title-zh">EviSearch：一个人机协作系统，用于提取和审核系统评价的临床证据</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14243</td>
+            <td><div class="title-zh">在悲观对手下的乐观策略学习，具有遗憾和违反保证</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14709</td>
+            <td><div class="title-zh">HWE-Bench：在真实世界硬件故障修复任务上对大型语言模型代理进行基准测试</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14309</td>
+            <td><div class="title-zh">流体天线辅助全双工网络中的空中多功能RIS：一种自优化混合深度强化学习方法</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14858</td>
+            <td><div class="title-zh">开放爪和Codex中的轨迹安全评估与诊断基准：ATBench-Claw和ATBench-CodeX</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14223</td>
+            <td><div class="title-zh">TRACE：一种具有代理反事实解释的可持续旅游推荐对话框架</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14585</td>
+            <td><div class="title-zh">提示优化如同抛硬币：诊断其在复合人工智能系统中的有效性</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14683</td>
+            <td><div class="title-zh">DR
+-Eval：迈向现实且可重复的深度研究评估</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14967</td>
+            <td><div class="title-zh">UniDoc-RL：具有分层动作和密集奖励的粗到细视觉RAG</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14583</td>
+            <td><div class="title-zh">从风险到救助：一种代理生存分析框架用于清算预防</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14216</td>
+            <td><div class="title-zh">神经预言者：一种轨迹感知的自主RAG框架，用于可解释的癫痫外科预后</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14607</td>
+            <td><div class="title-zh">GDPR自动化合规与人工智能代理及人工验证</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14401</td>
+            <td><div class="title-zh">Credo：通过信念和政策对大型语言模型管道进行声明性控制</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14362</td>
+            <td><div class="title-zh">APEX-MEM：具有时间推理的代理半结构化记忆，用于长期对话人工智能</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14495</td>
+            <td><div class="title-zh">将身份与效用解耦：金融生态系统中的隐私设计框架</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14944</td>
+            <td><div class="title-zh">HRDexDB：一个大规模的人类与机器人灵巧手抓握数据集</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14261</td>
+            <td><div class="title-zh">ReviewGrounder：通过评分标准引导的工具集成代理提升评审实质性</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14799</td>
+            <td><div class="title-zh">知道何时不回答：评估多模态推理系统中的弃权</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14256</td>
+            <td><div class="title-zh">在模拟人工智能市场动态下对代理的评估</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14267</td>
+            <td><div class="title-zh">通过贡献加权的群体相对策略优化增强基于大型语言模型的搜索代理</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14712</td>
+            <td><div class="title-zh">SGA-MCTS：通过无训练的原子经验检索将规划与执行解耦</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14593</td>
+            <td><div class="title-zh">大型语言模型中认知构造的机制解码</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14877</td>
+            <td><div class="title-zh">RL是否扩展了LLM代理的能力边界？一项PASS@(k,T)分析</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.15001</td>
+            <td><div class="title-zh">COEVO：基于共同进化框架的LLM驱动RTL生成中的联合功能正确性与PPA优化</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14475</td>
+            <td><div class="title-zh">Evo-MedAgent：超越一次性诊断的智能体，具备记忆、反思和改进能力</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14398</td>
+            <td><div class="title-zh">时间尺度分离使得旋转冲击发动机模式转换的深度强化学习控制成为可能</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14615</td>
+            <td><div class="title-zh">CoDaS：用于通过可穿戴传感器进行生物标志物发现的人工智能共同数据科学家</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14989</td>
+            <td><div class="title-zh">博士~RTL：通过工具基础的自我改进实现自主代理的RTL优化</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14969</td>
+            <td><div class="title-zh">通过任务-能力共演发现新型大语言模型专家</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.14240</td>
+            <td><div class="title-zh">可解释和可解释的替代建模用于仿真：最新进展综述及决策中可解释人工智能的展望</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+
+          <tr>
+            <td class="arxiv-id">2604.15124</td>
+            <td><div class="title-zh">盲法多评估者比较大型语言模型与临床医生撰写的CGM信息糖尿病咨询回复的评估</div></td>
+            <td><span class="count-badge count-web">0</span></td>
+            <td><span class="count-badge count-gui">0</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </details>
+  </div>
+
+</div>
+
+<script>
+const ctx = document.getElementById('kwChart').getContext('2d');
+new Chart(ctx, {
+  type: 'bar',
+  data: {
+    labels: ["GUI Agent"],
+    datasets: [
+      {
+        label: '✓ 命中录入',
+        data: [4],
+        backgroundColor: 'rgba(16, 185, 129, 0.85)',
+        borderRadius: 6,
+        stack: 's'
+      },
+      {
+        label: '⊘ 未命中过滤',
+        data: [55],
+        backgroundColor: 'rgba(148, 163, 184, 0.65)',
+        borderRadius: 6,
+        stack: 's'
+      },
+      {
+        label: '⌛ PDF 超时',
+        data: [0],
+        backgroundColor: 'rgba(245, 158, 11, 0.85)',
+        borderRadius: 6,
+        stack: 's'
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      x: { stacked: true, grid: { display: false } },
+      y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } }
+    },
+    plugins: {
+      legend: { position: 'top', align: 'end' },
+      tooltip: { mode: 'index', intersect: false }
+    }
+  }
+});
+</script>
+</body>
+</html>
