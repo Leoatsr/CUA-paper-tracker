@@ -1,216 +1,252 @@
-# 论文定时追踪与飞书录入系统
+# CUA Paper Tracker · 论文定时追踪与飞书录入
 
-根据 SOP 规格实现：每日北京时间 04:00、22:00 自动从 chatpaper.com 采集 6 个关键词下过去 24 小时发布的新论文，统计 PDF 中 Web Agent / GUI Agent 出现次数，录入飞书多维表格。
+每日自动从 [ChatPaper](https://chatpaper.com) 采集指定关键词下发布的最新论文，对 PDF 做关键词计数与过滤，将命中的论文录入飞书多维表格，并生成可视化 HTML 报告发布到 GitHub Pages。
 
----
-
-## 1. 项目结构
-
-```
-paper_tracker/
-├── requirements.txt
-├── README.md
-├── config/
-│   ├── config.example.yaml   # 配置模板
-│   └── .env.example          # 飞书凭证模板
-├── data/
-│   ├── history.json          # 已录入论文的 arXiv ID（自动生成）
-│   └── logs/                 # 每日运行日志（自动生成）
-├── src/
-│   ├── __init__.py
-│   ├── main.py               # 主入口
-│   ├── scheduler.py          # APScheduler 定时调度
-│   ├── chatpaper.py          # Playwright 采集 chatpaper.com
-│   ├── pdf_analyzer.py       # PyMuPDF 下载 + 分析 arXiv PDF
-│   ├── feishu.py             # 飞书多维表格录入
-│   ├── dedup.py              # history_set 本地持久化
-│   ├── matchers.py           # 模糊匹配规则
-│   └── models.py             # Pydantic 数据模型
-└── tests/
-    └── test_matchers.py      # 匹配规则单元测试
-```
+**🟢 在线报告**：<https://leoatsr.github.io/CUA-paper-tracker/>
 
 ---
 
-## 2. 安装
+## ✨ 功能
+
+- 🔍 **按关键词搜索 + 翻页**：6 个一级关键词（GUI Agent / Web Agent / CUA / computer use / mobile agent / GUI grounding），自动翻页直到遇到目标日期前一天的论文
+- 📅 **按目标日期采集**：默认采集「北京时间昨天」发布的论文，可通过参数指定
+- 📑 **PDF 关键词计数**：从 arXiv 下载 PDF，统计 Web Agent / GUI Agent 两类词出现次数，未命中的论文自动过滤不写飞书
+- 📊 **多维表录入**：10 个字段完整录入（中/英文标题、机构、日期、作者、arxiv、project、概要、简介、图片）
+- 🔁 **跨任务去重**：用 `data/history.json` 持久化已处理论文的 arXiv ID
+- 📈 **可视化报告**：每次跑完生成 HTML 报告（Chart.js 柱状图 + 录入/过滤明细表）
+- ☁️ **云端自动运行**：GitHub Actions 每天定时跑，无需本地开机
+
+---
+
+## 🎯 运行模式
+
+### 方式一：GitHub Actions 云端跑（推荐）
+
+仓库里的 `.github/workflows/daily.yml` 已配置好。
+
+- **自动触发**：每天 UTC 14:00（北京时间 22:00 左右）
+- **手动触发**：GitHub Actions 页面 → Run workflow，可传入 `target_date`、`keywords`、`dry_run` 参数
+- **报告发布**：每次跑完 HTML 报告自动推送到 `gh-pages` 分支，访问 https://leoatsr.github.io/CUA-paper-tracker/ 查看
+
+部署步骤详见 [DEPLOY_GITHUB.md](./DEPLOY_GITHUB.md)。
+
+### 方式二：本地跑
 
 ```bash
-# 推荐使用 Python 3.10+
-pip install -r requirements.txt
+# 立即跑一次（采北京昨天的论文）
+python -m src.main --once
 
-# Playwright 首次使用需要下载 Chromium 二进制
+# 指定目标日期
+python -m src.main --once --date 2026-04-17
+
+# 只跑指定关键词（逗号分隔）
+python -m src.main --once --keywords "GUI Agent,Web Agent"
+
+# DRY-RUN 模式：不写飞书、不更新 history
+python -m src.main --once --dry-run
+
+# 常驻调度模式（每日北京时间 22:00 自动跑）
+python -m src.main
+```
+
+---
+
+## 🏗️ 项目结构
+
+```
+CUA-paper-tracker/
+├── .github/workflows/
+│   └── daily.yml              # GitHub Actions 定时工作流
+├── src/
+│   ├── main.py                # 主入口 + CLI 参数解析
+│   ├── chatpaper.py           # Playwright 采集 chatpaper.com（URL 搜索 + 翻页）
+│   ├── pdf_analyzer.py        # PyMuPDF 下载分析 arXiv PDF
+│   ├── feishu.py              # 飞书多维表录入 + 图片上传（支持 Wiki 嵌套）
+│   ├── matchers.py            # 关键词模糊匹配规则
+│   ├── models.py              # Pydantic 数据模型
+│   ├── dedup.py               # history.json 持久化
+│   ├── report.py              # HTML 可视化报告生成
+│   └── scheduler.py           # APScheduler 调度（本地常驻模式用）
+├── config/
+│   ├── config.example.yaml    # 配置模板（字段映射等）
+│   └── .env.example           # 飞书凭证模板
+├── data/
+│   ├── history.json           # 已处理 arXiv ID（云端工作流自动 commit 回仓库）
+│   ├── logs/                  # 运行日志（.gitignore）
+│   └── reports/               # 生成的 HTML 报告（.gitignore，云端会推到 gh-pages）
+├── tests/
+│   └── test_matchers.py       # 匹配规则单元测试
+├── tools/
+│   └── dump_html.py           # 本地调试工具：dump chatpaper 真实 DOM
+├── DEPLOY_GITHUB.md           # 云端部署完整指南
+├── requirements.txt
+└── README.md
+```
+
+---
+
+## 📋 核心规则
+
+### 一级关键词（6 个）
+
+在 chatpaper 搜索页输入这些关键词：
+
+| 关键词 | 说明 |
+|---|---|
+| `GUI Agent` | 图形界面智能体 |
+| `Web Agent` | 网页智能体 |
+| `CUA` | Computer-Using Agent |
+| `computer use` | 电脑操作能力 |
+| `mobile agent` | 移动端智能体 |
+| `GUI grounding` | GUI 定位 |
+
+### 二级关键词（PDF 计数）
+
+对命中的论文 PDF 全文计数以下两类，合计 ≥ 1 才写飞书：
+
+- **Web Agent 类**：web agent / webagent / web-agent / web agents（大小写/连字符/复数不敏感）
+- **GUI Agent 类**：gui agent / guiagent / gui-agents（同上）
+- **CUA**：单词边界精确匹配（区分大小写，避免误伤 evacuation 之类）
+
+### 采集流程
+
+```
+对每个关键词：
+  访问 https://chatpaper.com/zh-CN/search?keywords=xxx&type=all&sort=date&page=1
+  逐页翻：
+    每张卡片读 Published Date：
+      = 目标日期 → 进详情页 → 下 PDF → 计数 → 过滤 → 写飞书
+      < 目标日期 → 停止本关键词
+    遍历完本页 → 翻下一页
+    最多翻 30 页保护
+```
+
+### 飞书字段映射
+
+| 飞书字段 | 来源 |
+|---|---|
+| 论文 | chatpaper 中文标题 |
+| 标题 | chatpaper 英文标题 |
+| 机构 | 论文机构列表（多值） |
+| 日期 | 卡片/详情页 Published Date |
+| 作者 | 作者列表（多值） |
+| arxiv | `https://arxiv.org/abs/xxxx.xxxxx` |
+| project | Abstract 区域内第一个非 arxiv 外链（如 GitHub / aka.ms 等） |
+| 概要 | chatpaper Core Points 面板的 tldr 总结 |
+| 简介 | chatpaper 中文 Abstract |
+| 图片 | AI Summary 中第一张论文配图（上传为飞书附件） |
+
+---
+
+## 🔧 本地开发安装
+
+### 1. 依赖
+
+```bash
+# 需要 Python 3.10+
+python -m venv venv
+venv\Scripts\activate.bat      # Windows
+# source venv/bin/activate     # Linux/macOS
+
+pip install -r requirements.txt
 python -m playwright install chromium
 ```
 
----
-
-## 3. 配置
-
-### 3.1 飞书应用
-
-1. 在 [飞书开放平台](https://open.feishu.cn/) 创建 **自建应用**
-2. 开通权限：
-   - `bitable:app`（多维表格读写）
-   - `drive:drive`（云空间上传图片）
-3. 将应用添加到目标多维表格所在的空间/文档，授予编辑权限
-4. 从应用详情页复制 `App ID` 和 `App Secret`
-
-### 3.2 多维表格
-
-打开目标多维表格，从 URL 提取两个参数：
-```
-https://xxx.feishu.cn/base/{FEISHU_APP_TOKEN}?table={FEISHU_TABLE_ID}&view=...
-```
-
-确保表格中已建好 10 个字段：
-- 论文（文本）
-- 标题（文本）
-- 机构（多选）
-- 日期（日期）
-- 作者（多选）
-- arxiv（超链接）
-- project（超链接）
-- 概要（多行文本）
-- 简介（多行文本）
-- 图片（附件）
-
-### 3.3 写配置文件
+### 2. 配置
 
 ```bash
+# 复制模板
 cp config/.env.example .env
 cp config/config.example.yaml config/config.yaml
 ```
 
-编辑 `.env`，填入飞书凭证和表格 ID。
-编辑 `config/config.yaml`，如果你的飞书字段名不是默认值就修改 `field_mapping`。
+编辑 `.env`，填入飞书应用凭证：
+
+```
+FEISHU_APP_ID=cli_xxxx
+FEISHU_APP_SECRET=xxx
+FEISHU_APP_TOKEN=xxx           # 如果是 Wiki 嵌套多维表，填 wiki node token
+FEISHU_TABLE_ID=tblxxx
+CONFIG_PATH=config/config.yaml
+```
+
+编辑 `config/config.yaml`，如果是 Wiki 嵌套多维表设 `is_wiki: true`：
+
+```yaml
+feishu:
+  is_wiki: true               # Wiki 嵌套多维表 / false = 普通 base URL
+  field_mapping:
+    论文: "论文"
+    ...
+```
+
+### 3. 飞书应用权限
+
+在 [飞书开放平台](https://open.feishu.cn/app) 创建自建应用，开通以下权限并发布版本：
+
+- `bitable:app` - 多维表格读写
+- `drive:drive` - 云空间文件管理（图片上传）
+- `wiki:wiki:readonly`（或 `wiki:wiki`）- 仅当多维表在 Wiki 里时需要
+
+然后把应用添加到目标多维表格，授予**可编辑**权限。
 
 ---
 
-## 4. ⚠️ 部署前必做：调试 chatpaper 选择器
-
-`src/chatpaper.py` 顶部 `SELECTORS` 字典里的所有 CSS 选择器都是 **占位符**。
-因为 chatpaper.com 的真实 DOM 无法静态确定，需要你实际打开网站抓取一次。
-
-### 步骤
-
-```bash
-# 以非无头模式运行，观察浏览器行为
-# 将 config.yaml 中 headless: false
-python -m src.main --once
-```
-
-然后：
-
-1. 浏览器打开 https://chatpaper.com/zh-CN
-2. 按 `F12` 打开 DevTools
-3. 用"Select an element"工具逐一定位以下元素，复制选择器：
-   - 搜索框 → `search_input`
-   - Published Date 排序按钮 → `sort_published_date`
-   - 论文列表卡片 → `paper_card`
-   - 卡片内的中文/英文标题、日期、arXiv 链接
-   - 详情页内的作者、机构、Core Points、Abstract 中文、第一张图
-4. 把抓到的选择器替换到 `SELECTORS` 字典里
-
-调试时把 `headless: false`，能直接看到浏览器的点击/输入行为。
-
----
-
-## 5. 运行
-
-```bash
-# 只采集不录入（调试选择器用，不改飞书、不改 history）
-python -m src.main --once --dry-run
-
-# 立即执行一次完整流程
-python -m src.main --once
-
-# 常驻模式（生产，每日 04:00 / 22:00 北京时间触发）
-python -m src.main
-```
-
-### 后台常驻（Linux，systemd）
-
-`/etc/systemd/system/paper-tracker.service`：
-```ini
-[Unit]
-Description=Paper Tracker
-After=network.target
-
-[Service]
-Type=simple
-User=your_user
-WorkingDirectory=/path/to/paper_tracker
-ExecStart=/usr/bin/python3 -m src.main
-Restart=on-failure
-RestartSec=30
-
-[Install]
-WantedBy=multi-user.target
-```
-
-```bash
-sudo systemctl enable --now paper-tracker
-sudo journalctl -u paper-tracker -f
-```
-
-### 后台常驻（macOS / 通用）
-
-```bash
-nohup python -m src.main > data/logs/nohup.out 2>&1 &
-```
-
----
-
-## 6. 与 SOP 的对应关系
-
-| SOP 章节 | 代码位置 |
-|---|---|
-| § 0.2 模糊匹配规则 | `src/matchers.py` |
-| § 1 调度（北京时间 04:00 / 22:00） | `src/scheduler.py` |
-| § 2 chatpaper 采集 + 跨关键词/跨任务去重 | `src/chatpaper.py`, `src/dedup.py`, `src/main.py` |
-| § 3 PDF 计数（3 分钟超时） | `src/pdf_analyzer.py` |
-| § 4 飞书录入 + arxiv 链接去重 | `src/feishu.py` |
-| § 5 运行日志 | loguru 每日切片于 `data/logs/` |
-
----
-
-## 7. 与 SOP 的两处工程化差异（已在代码中实现）
-
-| SOP 原描述 | 实际实现 | 原因 |
-|---|---|---|
-| 在云端打开 PDF 按 Ctrl+F 检索 | 直接从 arXiv 下载 PDF，PyMuPDF 全文正则计数 | 更快、更准、更稳定，避免浏览器 PDF 查看器的懒加载问题 |
-| 把第一张图复制粘贴到飞书 | 从 chatpaper 下载图片 URL → 上传为飞书附件 | 飞书 API 不支持"粘贴"操作，附件展示效果一致 |
-
----
-
-## 8. 测试
+## 🧪 测试
 
 ```bash
 python tests/test_matchers.py
 ```
 
-验证模糊匹配规则（7 个测试用例，含 CUA 不误伤 evacuation 等场景）。
+---
+
+## ⚙️ 命令行参数
+
+| 参数 | 说明 |
+|---|---|
+| `--once` | 立即执行一次（非常驻模式） |
+| `--date YYYY-MM-DD` | 指定目标日期（默认北京昨日） |
+| `--keywords "A,B"` | 仅跑指定关键词（逗号分隔） |
+| `--dry-run` | 调试模式，不写飞书、不更新 history |
+
+示例：
+
+```bash
+# 用 DRY-RUN 跑 2026-04-17 的 GUI Agent 试水
+python -m src.main --once --date 2026-04-17 --keywords "GUI Agent" --dry-run
+```
 
 ---
 
-## 9. 运维建议
+## 📊 报告
 
-- **首次部署**：建议先用 `--once` 跑一次，观察日志和飞书录入效果
-- **选择器失效**：chatpaper 网站改版后选择器会失效，表现为采集数量为 0，检查 `data/logs/` 里的警告
-- **timeout_queue**：如果某些论文长期超时，可手动从 arXiv 下载后用 `python -c "from src.pdf_analyzer import analyze_pdf; ..."` 本地处理后入库
-- **历史库迁移**：`data/history.json` 是纯 JSON 列表，可随意备份/合并
+每次跑完自动生成：
+
+- `data/reports/report_<target_date>.html` - 可视化报告（本地打开即看）
+- `data/reports/report_<target_date>.json` - 原始数据
+
+云端模式下：
+- 每次 run 结果作为 Actions artifact 保留 7 天（可在 Actions 页面下载）
+- HTML 报告同时推送到 `gh-pages` 分支
+- 访问 <https://leoatsr.github.io/CUA-paper-tracker/> 查看
 
 ---
 
-## 10. 依赖清单
+## 🛠️ 依赖
 
-```
-playwright       — 浏览器自动化
-pymupdf (fitz)   — PDF 文本提取
-lark-oapi        — 飞书官方 SDK
-apscheduler      — 定时任务
-httpx            — 异步 HTTP（下载 PDF 和图片）
-pydantic         — 数据模型
-loguru           — 日志
-pyyaml, python-dotenv, pytz — 配置与时区
-```
+| 包 | 用途 |
+|---|---|
+| playwright | 浏览器自动化（采集 chatpaper） |
+| pymupdf | PDF 下载与文本提取 |
+| lark-oapi | 飞书官方 SDK |
+| pydantic | 数据模型与校验 |
+| httpx | 异步 HTTP（PDF / 图片下载） |
+| loguru | 结构化日志 |
+| apscheduler | 定时任务（仅本地常驻模式用） |
+| pyyaml / python-dotenv | 配置加载 |
+
+---
+
+## 📄 License
+
+MIT
