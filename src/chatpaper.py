@@ -12,6 +12,7 @@ chatpaper.com 采集器 v2.0 - URL 搜索 + 自动翻页 + 目标日期停止
 关键词拼接规则: 空格用 +，如 "GUI Agent" → "GUI+Agent"
 """
 import re
+import asyncio
 from datetime import datetime, date
 from typing import Optional, AsyncIterator, List
 from urllib.parse import quote_plus
@@ -66,9 +67,15 @@ class ChatPaperScraper:
     )
     MAX_PAGES = 30  # 防御：超过就停，避免无限翻
 
-    def __init__(self, headless: bool = True, navigation_timeout_ms: int = 60000):
+    def __init__(self, headless: bool = True, navigation_timeout_ms: int = 60000, cookies_json: str = None):
+        """
+        :param cookies_json: ChatPaper 的 cookies JSON 字符串（Cookie-Editor 导出的 JSON 数组格式）
+                             None 或空字符串则不注入，走未登录流程
+        """
         self.headless = headless
         self.nav_timeout = navigation_timeout_ms
+        self.cookies_json = cookies_json
+        self.cookies_injected = 0  # 实际注入的 cookies 条数（__aenter__ 里赋真值）
         self._pw = None
         self._browser = None
         self._context = None
@@ -81,7 +88,63 @@ class ChatPaperScraper:
             viewport={'width': 1440, 'height': 900},
         )
         self._context.set_default_navigation_timeout(self.nav_timeout)
+
+        # 注入 ChatPaper 登录 cookies
+        self.cookies_injected = await self._inject_cookies()
+
         return self
+
+    async def _inject_cookies(self) -> int:
+        """从 cookies_json 字符串解析并注入 Playwright context。
+        返回实际注入的 cookie 条数，0 表示未登录。
+        """
+        if not self.cookies_json:
+            logger.info("未提供 ChatPaper cookies，以未登录状态采集")
+            return 0
+        import json
+        try:
+            raw = json.loads(self.cookies_json)
+            if not isinstance(raw, list):
+                logger.error(f"cookies JSON 不是数组格式，跳过注入: type={type(raw).__name__}")
+                return 0
+
+            # Cookie-Editor 导出的字段名与 Playwright 需要的略有差异，做一层转换
+            cookies = []
+            for c in raw:
+                if not isinstance(c, dict) or 'name' not in c or 'value' not in c:
+                    continue
+                pc = {
+                    'name': c['name'],
+                    'value': c['value'],
+                    'domain': c.get('domain', '.chatpaper.com'),
+                    'path': c.get('path', '/'),
+                    'httpOnly': bool(c.get('httpOnly', False)),
+                    'secure': bool(c.get('secure', False)),
+                }
+                # sameSite: Cookie-Editor 可能写 "no_restriction"/"unspecified"，Playwright 要 "None"/"Lax"/"Strict"
+                ss_map = {
+                    'no_restriction': 'None', 'unspecified': 'Lax', 'lax': 'Lax',
+                    'strict': 'Strict', 'none': 'None',
+                }
+                raw_ss = (c.get('sameSite') or 'Lax').lower()
+                pc['sameSite'] = ss_map.get(raw_ss, 'Lax')
+                # 过期时间
+                if 'expirationDate' in c:
+                    pc['expires'] = int(c['expirationDate'])
+                elif 'expires' in c and isinstance(c['expires'], (int, float)):
+                    pc['expires'] = int(c['expires'])
+                cookies.append(pc)
+
+            if not cookies:
+                logger.warning("cookies JSON 有效条目为 0，跳过注入")
+                return 0
+
+            await self._context.add_cookies(cookies)
+            logger.info(f"✓ 已注入 {len(cookies)} 条 ChatPaper cookies（登录状态）")
+            return len(cookies)
+        except Exception as e:
+            logger.error(f"解析/注入 cookies 失败: {e}")
+            return 0
 
     async def __aexit__(self, *args):
         if self._context:
@@ -167,10 +230,22 @@ class ChatPaperScraper:
                     f"[{keyword}] 第 {page_num} 页: 本页 {len(card_metas)} 张 / 命中目标日 {len(page_target_metas)} 张"
                 )
 
-                # 逐一进入详情页采集
+                # 逐一进入详情页采集（失败自动重试 1 次）
                 for meta in page_target_metas:
-                    paper = await self._fetch_detail(meta)
+                    paper = None
+                    for attempt in (1, 2):
+                        paper = await self._fetch_detail(meta)
+                        if paper is not None:
+                            break
+                        if attempt == 1:
+                            logger.warning(
+                                f"[{keyword}] 详情页采集失败，5s 后重试: {meta.get('detail_url')}"
+                            )
+                            await asyncio.sleep(5)
                     if paper is None:
+                        logger.error(
+                            f"[{keyword}] 详情页重试 2 次仍失败，跳过: {meta.get('detail_url')}"
+                        )
                         continue
                     yield paper
 

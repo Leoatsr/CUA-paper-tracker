@@ -58,12 +58,37 @@ def _render_html(task_log: TaskLog) -> str:
     total_timeout = len(task_log.timeout_queue)
     total_feishu_skipped = len(task_log.feishu_skipped)
     total_feishu_failed = len(task_log.feishu_failed)
+    total_deduped = sum(k.deduped for k in task_log.keyword_stats)
+
+    # E. 漏采数：cards_seen 减去所有已知的处理结果（录入/过滤/超时/去重/飞书已有/飞书失败）
+    #    差额表示"详情页打开失败 or 其他未知异常"的论文数
+    total_accounted = (
+        total_recorded + total_filtered + total_timeout + total_deduped
+        + total_feishu_skipped + total_feishu_failed
+    )
+    total_missed = max(0, total_seen - total_accounted)
+
+    # B. 字段完整性：对已录入的论文统计概要/图片/project 非空比例
+    recorded_has_core_points = sum(1 for r in task_log.records if r.status == 'recorded' and r.has_core_points)
+    recorded_has_image = sum(1 for r in task_log.records if r.status == 'recorded' and r.has_image)
+    recorded_has_project = sum(1 for r in task_log.records if r.status == 'recorded' and r.has_project)
+    completeness_total = total_recorded
+
+    def _pct(n, total):
+        if total == 0:
+            return "—"
+        return f"{int(round(n * 100 / total))}%"
+
+    pct_core_points = _pct(recorded_has_core_points, completeness_total)
+    pct_image = _pct(recorded_has_image, completeness_total)
+    pct_project = _pct(recorded_has_project, completeness_total)
 
     # 关键词统计（供 Chart.js 使用）
     kw_labels = [ks.keyword for ks in task_log.keyword_stats]
     kw_recorded = [ks.recorded for ks in task_log.keyword_stats]
     kw_filtered = [ks.filtered for ks in task_log.keyword_stats]
     kw_timeout = [ks.timeout for ks in task_log.keyword_stats]
+    kw_deduped = [ks.deduped for ks in task_log.keyword_stats]
 
     # 录入明细（按关键词分组）
     recorded_records = [r for r in task_log.records if r.status == "recorded"]
@@ -262,13 +287,73 @@ def _render_html(task_log: TaskLog) -> str:
   details summary::before {{ content: "▶ "; font-size: 10px; color: #94a3b8; }}
   details[open] summary::before {{ content: "▼ "; }}
   details[open] summary {{ background: #ede9fe; color: #6d28d9; }}
+
+  /* sticky 顶部导航 */
+  .nav-bar {{
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(255,255,255,0.96);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid #e5e7eb;
+    padding: 10px 16px;
+    margin: -20px -20px 24px -20px;
+    display: flex;
+    gap: 12px;
+    font-size: 13px;
+    align-items: center;
+    flex-wrap: wrap;
+  }}
+  .nav-bar a {{
+    color: #475569;
+    text-decoration: none;
+    padding: 4px 10px;
+    border-radius: 6px;
+    transition: background 0.15s;
+  }}
+  .nav-bar a:hover {{ background: #ede9fe; color: #6d28d9; }}
+
+  /* 登录徽章 */
+  .login-badge {{
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+  }}
+  .login-badge.ok {{ background: #d1fae5; color: #065f46; }}
+  .login-badge.fail {{ background: #fee2e2; color: #991b1b; }}
+
+  /* 字段完整性指示 */
+  .completeness-bar {{
+    display: flex;
+    gap: 20px;
+    padding: 8px 14px;
+    background: #f8fafc;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #475569;
+    flex-wrap: wrap;
+  }}
+  .completeness-bar strong {{ color: #0f172a; }}
 </style>
 </head>
 <body>
 <div class="container">
 
+  <!-- sticky 导航栏 -->
+  <nav class="nav-bar">
+    <a href="#top">🏠 顶部</a>
+    <a href="#range">🧭 采集范围</a>
+    <a href="#recorded">✓ 录入明细</a>
+    <a href="#filtered">⊘ 未命中</a>
+    <a href="#timeout">⌛ 超时</a>
+  </nav>
+
   <!-- Header -->
-  <div class="header">
+  <div class="header" id="top">
     <h1>📑 论文追踪报告
       {'<span class="dry-run-badge">DRY-RUN 模式</span>' if task_log.dry_run else ''}
     </h1>
@@ -276,6 +361,20 @@ def _render_html(task_log: TaskLog) -> str:
       目标采集日期 <strong>{target_date_str}</strong>
       · 执行时间 {task_time_bj_str} (北京时间)
     </div>
+  </div>
+
+  <!-- A. ChatPaper 登录状态徽章 -->
+  <div style="display:flex; gap:12px; align-items:center; margin-bottom:16px; flex-wrap:wrap">
+    {'<span class="login-badge ok">🟢 ChatPaper 已登录 (cookies ' + str(task_log.chatpaper_cookies_count) + ' 条)</span>' if task_log.chatpaper_logged_in else '<span class="login-badge fail">🔴 ChatPaper 未登录（cookies 过期？去更新 CHATPAPER_COOKIES Secret）</span>'}
+    {'<span class="login-badge fail">⚠️ 漏采 ' + str(total_missed) + ' 篇（详情页打开失败）</span>' if total_missed > 0 else ''}
+  </div>
+
+  <!-- B. 字段完整性指示 -->
+  <div class="completeness-bar">
+    字段完整性（录入的 {completeness_total} 篇中）：
+    概要 <strong>{pct_core_points}</strong> ({recorded_has_core_points}/{completeness_total})
+    · 图片 <strong>{pct_image}</strong> ({recorded_has_image}/{completeness_total})
+    · project <strong>{pct_project}</strong> ({recorded_has_project}/{completeness_total})
   </div>
 
   <!-- 统计卡片 -->
@@ -305,6 +404,11 @@ def _render_html(task_log: TaskLog) -> str:
       <div class="label">飞书已有</div>
       <div class="value">{total_feishu_skipped}</div>
     </div>
+    <div class="stat-card gray">
+      <div class="accent"></div>
+      <div class="label">历史去重</div>
+      <div class="value">{total_deduped}</div>
+    </div>
     <div class="stat-card danger">
       <div class="accent"></div>
       <div class="label">飞书失败</div>
@@ -331,7 +435,7 @@ def _render_html(task_log: TaskLog) -> str:
     if range_rows:
         html_parts.append('''
   <!-- 采集范围 -->
-  <div class="section">
+  <div class="section" id="range">
     <h2>🧭 本次采集范围（每个关键词首末篇）</h2>
     <table>
       <thead>
@@ -368,7 +472,7 @@ def _render_html(task_log: TaskLog) -> str:
     # 录入明细
     html_parts.append(f'''
   <!-- 录入明细 -->
-  <div class="section">
+  <div class="section" id="recorded">
     <h2>✓ 录入明细 ({len(recorded_records)} 篇)</h2>
 ''')
     if recorded_records:
@@ -376,14 +480,12 @@ def _render_html(task_log: TaskLog) -> str:
     <table>
       <thead>
         <tr>
-          <th>arXiv</th>
-          <th>标题</th>
-          <th>发布日期</th>
-          <th>命中</th>
-          <th>web_agent</th>
-          <th>gui_agent</th>
+          <th>Title</th>
+          <th style="width:110px">发布日期</th>
+          <th style="width:90px">web_agent</th>
+          <th style="width:90px">gui_agent</th>
           <th>机构</th>
-          <th style="width:90px">链接</th>
+          <th style="width:110px">链接</th>
         </tr>
       </thead>
       <tbody>
@@ -392,15 +494,10 @@ def _render_html(task_log: TaskLog) -> str:
             date_str = r.date.isoformat() if r.date else "-"
             html_parts.append(f'''
         <tr>
-          <td class="arxiv-id">{_html_escape(r.arxiv_id)}</td>
-          <td>
-            <div class="title-zh">{_html_escape(r.title_zh)}</div>
-            <div class="title-en">{_html_escape(r.title_en)}</div>
-          </td>
+          <td><div class="title-en" style="font-size:14px;color:#0f172a">{_html_escape(r.title_en or r.title_zh)}</div></td>
           <td style="white-space:nowrap;color:#64748b;font-size:12px">{_html_escape(date_str)}</td>
-          <td><span class="keyword-tag">{_html_escape(r.matched_keyword or "")}</span></td>
-          <td><span class="count-badge count-web">{r.web_agent_count}</span></td>
-          <td><span class="count-badge count-gui">{r.gui_agent_count}</span></td>
+          <td style="text-align:center"><span class="count-badge count-web">{r.web_agent_count}</span></td>
+          <td style="text-align:center"><span class="count-badge count-gui">{r.gui_agent_count}</span></td>
           <td class="institutions">{_html_escape("; ".join(r.institutions))}</td>
           <td><a class="link-btn" href="{_html_escape(r.chatpaper_url or r.arxiv_url)}" target="_blank">ChatPaper →</a></td>
         </tr>
@@ -414,7 +511,7 @@ def _render_html(task_log: TaskLog) -> str:
     if filtered_records:
         html_parts.append(f'''
   <!-- 过滤明细（折叠）-->
-  <div class="section">
+  <div class="section" id="filtered">
     <h2>⊘ 未命中过滤 ({len(filtered_records)} 篇)</h2>
     <details>
       <summary>展开查看全部 {len(filtered_records)} 篇未命中关键词的论文</summary>
@@ -437,7 +534,7 @@ def _render_html(task_log: TaskLog) -> str:
     if timeout_records:
         html_parts.append(f'''
   <!-- 超时队列 -->
-  <div class="section" style="background:#fffbeb">
+  <div class="section" id="timeout" style="background:#fffbeb">
     <h2 style="border-left-color:#f59e0b">⌛ PDF 下载超时 ({len(timeout_records)} 篇)</h2>
     <table>
       <thead><tr><th>arXiv</th><th>标题</th><th>命中关键词</th></tr></thead>
@@ -495,6 +592,13 @@ new Chart(ctx, {{
         label: '⊘ 未命中过滤',
         data: {json.dumps(kw_filtered)},
         backgroundColor: 'rgba(148, 163, 184, 0.65)',
+        borderRadius: 6,
+        stack: 's'
+      }},
+      {{
+        label: '↻ 历史去重',
+        data: {json.dumps(kw_deduped)},
+        backgroundColor: 'rgba(99, 102, 241, 0.55)',
         borderRadius: 6,
         stack: 's'
       }},

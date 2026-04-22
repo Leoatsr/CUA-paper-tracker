@@ -16,7 +16,7 @@ class Paper(BaseModel):
     core_points: str = ""
     abstract_zh: str = ""
     image_url: Optional[str] = None
-    chatpaper_url: Optional[str] = None   # chatpaper 详情页 URL（报告里展示链接用）
+    chatpaper_url: Optional[str] = None
     matched_keyword: Optional[str] = None
     web_agent_count: int = 0
     gui_agent_count: int = 0
@@ -37,6 +37,10 @@ class PaperRecord(BaseModel):
     institutions: List[str] = Field(default_factory=list)
     status: str = "recorded"  # recorded / filtered / timeout / feishu_skipped / feishu_failed
     error: Optional[str] = None
+    # 字段完整性标志（给报告 B 指标用）
+    has_core_points: bool = False   # 概要是否非空
+    has_image: bool = False         # 图片 token 是否获取到
+    has_project: bool = False       # project URL 是否存在
 
 
 class KeywordStats(BaseModel):
@@ -63,6 +67,10 @@ class TaskLog(BaseModel):
     task_time_utc: datetime
     target_date: Optional[date_type] = None
     dry_run: bool = False
+
+    # ChatPaper 登录状态（给报告顶部徽章用）
+    chatpaper_logged_in: bool = False
+    chatpaper_cookies_count: int = 0
 
     # 统计
     keyword_counts: Dict[str, int] = Field(default_factory=dict)

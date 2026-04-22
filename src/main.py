@@ -130,7 +130,17 @@ async def run_task(
     )
     processed_set = set()
 
-    async with ChatPaperScraper(headless=CONFIG.get('headless', True)) as scraper:
+    # 从环境变量加载 ChatPaper 登录 cookies（用于绕过 AI Summary 的登录遮罩）
+    chatpaper_cookies = os.getenv('CHATPAPER_COOKIES', '').strip()
+
+    async with ChatPaperScraper(
+        headless=CONFIG.get('headless', True),
+        cookies_json=chatpaper_cookies or None,
+    ) as scraper:
+        # 记录 ChatPaper 登录状态（给报告顶部徽章用）
+        task_log.chatpaper_cookies_count = scraper.cookies_injected
+        task_log.chatpaper_logged_in = scraper.cookies_injected > 0
+
         for keyword in keywords_to_run:
             logger.info(f"━━━━━━ 关键词: {keyword} ━━━━━━")
             ks = KeywordStats(keyword=keyword)
@@ -200,9 +210,9 @@ async def run_task(
                             continue
 
                         # 命中过滤
-                        # 命中过滤: web_agent + gui_agent 合计 < 2 则跳过（即必须 ≥ 2 才录入）
+                        # 命中过滤: web_agent + gui_agent 合计 < 4 则跳过（即必须 ≥ 4 才录入）
                         total_hits = paper.web_agent_count + paper.gui_agent_count
-                        if total_hits < 2:
+                        if total_hits < 4:
                             ks.filtered += 1
                             task_log.records.append(PaperRecord(
                                 arxiv_id=paper.arxiv_id,
@@ -295,6 +305,9 @@ async def run_task(
                                 gui_agent_count=paper.gui_agent_count,
                                 institutions=paper.institutions,
                                 status='recorded',
+                                has_core_points=bool(paper.core_points),
+                                has_image=bool(image_token),
+                                has_project=bool(paper.project_url),
                             ))
                             logger.success(
                                 f"✓ 录入 {paper.arxiv_id} | "
@@ -302,6 +315,19 @@ async def run_task(
                                 f"gui_agent={paper.gui_agent_count} | "
                                 f"命中={keyword}"
                             )
+                            # 空字段告警（宽松版：只告 chatpaper 采到 URL 但飞书上传失败 / 预期字段为空）
+                            warnings = []
+                            if paper.image_url and not image_token:
+                                warnings.append("图片 URL 存在但上传飞书失败")
+                            if not paper.abstract_zh:
+                                warnings.append("中文 Abstract 为空")
+                            if not paper.title_en:
+                                warnings.append("英文标题为空")
+                            if task_log.chatpaper_logged_in and not paper.core_points:
+                                # 登录状态下还采不到概要，值得警告
+                                warnings.append("概要为空（已登录但未采到 Core Points）")
+                            if warnings:
+                                logger.warning(f"⚠️  {paper.arxiv_id} 字段问题: " + " | ".join(warnings))
                         except Exception as e:
                             task_log.feishu_failed.append({
                                 'arxiv_id': paper.arxiv_id,
