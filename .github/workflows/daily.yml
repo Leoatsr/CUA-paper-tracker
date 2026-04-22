@@ -110,6 +110,7 @@ jobs:
           TARGET_DATE: ${{ github.event.inputs.target_date }}
           KEYWORDS: ${{ github.event.inputs.keywords }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
+          CHATPAPER_COOKIES: ${{ secrets.CHATPAPER_COOKIES }}
         run: |
           ARGS="--once"
 
