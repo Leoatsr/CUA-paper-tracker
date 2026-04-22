@@ -30,6 +30,7 @@ class PaperRecord(BaseModel):
     chatpaper_url: Optional[str] = None
     title_zh: str = ""
     title_en: str = ""
+    date: Optional[date_type] = None  # PDF 水印日期
     matched_keyword: Optional[str] = None
     web_agent_count: int = 0
     gui_agent_count: int = 0
@@ -49,6 +50,11 @@ class KeywordStats(BaseModel):
     timeout: int = 0            # PDF 下载超时
     feishu_skipped: int = 0     # 飞书里已存在
     feishu_failed: int = 0      # 写飞书报错
+    # 报告"采集范围": 记录本关键词在 chatpaper 上实际遍历到的第一篇和最后一篇
+    first_arxiv_id: Optional[str] = None
+    first_title: Optional[str] = None
+    last_arxiv_id: Optional[str] = None
+    last_title: Optional[str] = None
 
 
 class TaskLog(BaseModel):

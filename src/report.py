@@ -321,6 +321,50 @@ def _render_html(task_log: TaskLog) -> str:
   </div>
 """)
 
+    # 采集范围：每个关键词在 chatpaper 上遍历到的首末篇
+    range_rows = []
+    for ks in task_log.keyword_stats:
+        if not ks.first_arxiv_id and not ks.last_arxiv_id:
+            continue
+        range_rows.append(ks)
+
+    if range_rows:
+        html_parts.append('''
+  <!-- 采集范围 -->
+  <div class="section">
+    <h2>🧭 本次采集范围（每个关键词首末篇）</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:140px">关键词</th>
+          <th>第一篇</th>
+          <th>最后一篇</th>
+          <th style="width:80px">本关键词总见</th>
+        </tr>
+      </thead>
+      <tbody>
+''')
+        for ks in range_rows:
+            first_cell = (
+                f'<span class="arxiv-id">{_html_escape(ks.first_arxiv_id or "")}</span>'
+                f'<div class="title-en" style="margin-top:4px">{_html_escape((ks.first_title or "")[:80])}</div>'
+                if ks.first_arxiv_id else '<span style="color:#cbd5e1">—</span>'
+            )
+            last_cell = (
+                f'<span class="arxiv-id">{_html_escape(ks.last_arxiv_id or "")}</span>'
+                f'<div class="title-en" style="margin-top:4px">{_html_escape((ks.last_title or "")[:80])}</div>'
+                if ks.last_arxiv_id else '<span style="color:#cbd5e1">—</span>'
+            )
+            html_parts.append(f'''
+        <tr>
+          <td><span class="keyword-tag">{_html_escape(ks.keyword)}</span></td>
+          <td>{first_cell}</td>
+          <td>{last_cell}</td>
+          <td style="text-align:center">{ks.cards_seen}</td>
+        </tr>
+''')
+        html_parts.append('      </tbody>\n    </table>\n  </div>\n')
+
     # 录入明细
     html_parts.append(f'''
   <!-- 录入明细 -->
@@ -334,6 +378,7 @@ def _render_html(task_log: TaskLog) -> str:
         <tr>
           <th>arXiv</th>
           <th>标题</th>
+          <th>发布日期</th>
           <th>命中</th>
           <th>web_agent</th>
           <th>gui_agent</th>
@@ -344,6 +389,7 @@ def _render_html(task_log: TaskLog) -> str:
       <tbody>
 ''')
         for r in recorded_records:
+            date_str = r.date.isoformat() if r.date else "-"
             html_parts.append(f'''
         <tr>
           <td class="arxiv-id">{_html_escape(r.arxiv_id)}</td>
@@ -351,6 +397,7 @@ def _render_html(task_log: TaskLog) -> str:
             <div class="title-zh">{_html_escape(r.title_zh)}</div>
             <div class="title-en">{_html_escape(r.title_en)}</div>
           </td>
+          <td style="white-space:nowrap;color:#64748b;font-size:12px">{_html_escape(date_str)}</td>
           <td><span class="keyword-tag">{_html_escape(r.matched_keyword or "")}</span></td>
           <td><span class="count-badge count-web">{r.web_agent_count}</span></td>
           <td><span class="count-badge count-gui">{r.gui_agent_count}</span></td>
@@ -372,16 +419,16 @@ def _render_html(task_log: TaskLog) -> str:
     <details>
       <summary>展开查看全部 {len(filtered_records)} 篇未命中关键词的论文</summary>
       <table style="margin-top:12px">
-        <thead><tr><th>arXiv</th><th>标题</th><th>web_agent</th><th>gui_agent</th></tr></thead>
+        <thead><tr><th style="width:140px">arXiv</th><th>Title</th></tr></thead>
         <tbody>
 ''')
         for r in filtered_records:
+            arxiv_link = r.arxiv_url or (f"https://arxiv.org/abs/{r.arxiv_id}" if r.arxiv_id else "")
+            title_to_show = r.title_en or r.title_zh
             html_parts.append(f'''
           <tr>
-            <td class="arxiv-id">{_html_escape(r.arxiv_id)}</td>
-            <td><div class="title-zh">{_html_escape(r.title_zh)}</div></td>
-            <td><span class="count-badge count-web">{r.web_agent_count}</span></td>
-            <td><span class="count-badge count-gui">{r.gui_agent_count}</span></td>
+            <td><a class="arxiv-id link-btn" href="{_html_escape(arxiv_link)}" target="_blank">{_html_escape(r.arxiv_id)}</a></td>
+            <td><div class="title-zh">{_html_escape(title_to_show)}</div></td>
           </tr>
 ''')
         html_parts.append('        </tbody>\n      </table>\n    </details>\n  </div>\n')

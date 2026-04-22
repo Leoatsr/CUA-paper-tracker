@@ -238,7 +238,39 @@ class ChatPaperScraper:
         page = await self._context.new_page()
         try:
             await page.goto(meta['detail_url'], wait_until='domcontentloaded', timeout=self.nav_timeout)
-            await page.wait_for_timeout(4000)
+
+            # 1. 主动等 Abstract 出现（页面骨架）
+            try:
+                await page.wait_for_selector(SELECTORS['detail_abstract_zh'], timeout=20000)
+            except Exception:
+                logger.warning(f"Abstract 未出现 (20s): {meta['detail_url']}")
+
+            # 2. 额外等 Core Points 区域（div.extra-content）出现，这里是"概要"所在
+            #    Core Points 是 API 异步渲染，需要给足时间
+            try:
+                await page.wait_for_selector('div.extra-content', timeout=15000)
+            except Exception:
+                logger.warning(f"div.extra-content 未出现 (15s): {meta['detail_url']}")
+
+            # 2.5 再等 is-tldr 或 markdown-body 渲染进去（Core Points 内容本身）
+            try:
+                await page.wait_for_selector(
+                    'div.answer-item.is-tldr div.markdown-body, div.extra-content div.markdown-body',
+                    timeout=10000,
+                )
+            except Exception:
+                logger.warning(f"Core Points 内容未渲染 (10s): {meta['detail_url']}")
+
+            # 3. 滚到页面中段，触发图片 lazy-load
+            try:
+                await page.evaluate("window.scrollTo(0, document.body.scrollHeight / 2)")
+                await page.wait_for_timeout(2000)
+                await page.evaluate("window.scrollTo(0, 0)")
+            except Exception:
+                pass
+
+            # 4. 最后再给一个短等待，让动态渲染完成
+            await page.wait_for_timeout(3500)
 
             arxiv_url, arxiv_id = await self._extract_arxiv(page)
             if not arxiv_id:
@@ -367,7 +399,14 @@ class ChatPaperScraper:
             return []
 
     async def _extract_first_figure(self, page: Page) -> Optional[str]:
+        """
+        提取论文首张图。优先级:
+        1) div.summary-content img 里 chatdoc-arxiv / arxiv 域名
+        2) div.summary-content img 第一个非 logo 非 data:
+        3) 兜底: 整个页面所有 img，找 chatdoc-arxiv 域名
+        """
         try:
+            # 一级：在 summary-content 里找
             imgs = await page.query_selector_all(SELECTORS['detail_images'])
             for img in imgs:
                 src = await img.get_attribute('src') or ''
@@ -375,7 +414,22 @@ class ChatPaperScraper:
                     return self._absolutize_url(src)
             for img in imgs:
                 src = await img.get_attribute('src') or ''
-                if src and not src.startswith('data:') and 'logo' not in src.lower():
+                if src and not src.startswith('data:') and 'logo' not in src.lower() and 'avatar' not in src.lower():
+                    return self._absolutize_url(src)
+        except Exception:
+            pass
+
+        # 二级兜底：扫整页所有 img
+        try:
+            all_imgs = await page.query_selector_all('img')
+            for img in all_imgs:
+                src = await img.get_attribute('src') or ''
+                if not src or src.startswith('data:'):
+                    continue
+                lower = src.lower()
+                if 'logo' in lower or 'avatar' in lower or 'icon' in lower:
+                    continue
+                if 'chatdoc-arxiv' in lower or 'arxiv' in lower or 'ctfassets' in lower:
                     return self._absolutize_url(src)
         except Exception:
             pass

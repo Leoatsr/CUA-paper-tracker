@@ -140,6 +140,23 @@ async def run_task(
                     async for paper in scraper.collect_for_date(keyword, td):
                         ks.cards_seen += 1
 
+                        # 记录本关键词遍历到的首末篇（用于报告"采集范围"）
+                        if ks.first_arxiv_id is None:
+                            ks.first_arxiv_id = paper.arxiv_id
+                            ks.first_title = paper.title_zh or paper.title_en
+                        ks.last_arxiv_id = paper.arxiv_id
+                        ks.last_title = paper.title_zh or paper.title_en
+
+                        # 字段完整性日志（帮助排查概要/图片为空的 bug）
+                        logger.info(
+                            f"📄 采集到 {paper.arxiv_id} | "
+                            f"标题={(paper.title_zh or paper.title_en)[:30]} | "
+                            f"概要长度={len(paper.core_points or '')} | "
+                            f"图片={'有' if paper.image_url else '无'} | "
+                            f"project={'有' if paper.project_url else '无'} | "
+                            f"简介长度={len(paper.abstract_zh or '')}"
+                        )
+
                         # 跨关键词 / 跨任务去重
                         if paper.arxiv_id in processed_set or history.contains(paper.arxiv_id):
                             logger.debug(f"跳过（已处理）: {paper.arxiv_id}")
@@ -160,6 +177,7 @@ async def run_task(
                                 arxiv_id=paper.arxiv_id,
                                 arxiv_url=paper.arxiv_url,
                                 chatpaper_url=paper.chatpaper_url,
+                                date=paper.date,
                                 title_zh=paper.title_zh,
                                 title_en=paper.title_en,
                                 matched_keyword=keyword,
@@ -182,13 +200,15 @@ async def run_task(
                             continue
 
                         # 命中过滤
+                        # 命中过滤: web_agent + gui_agent 合计 < 2 则跳过（即必须 ≥ 2 才录入）
                         total_hits = paper.web_agent_count + paper.gui_agent_count
-                        if total_hits < 1:
+                        if total_hits < 2:
                             ks.filtered += 1
                             task_log.records.append(PaperRecord(
                                 arxiv_id=paper.arxiv_id,
                                 arxiv_url=paper.arxiv_url,
                                 chatpaper_url=paper.chatpaper_url,
+                                date=paper.date,
                                 title_zh=paper.title_zh,
                                 title_en=paper.title_en,
                                 matched_keyword=keyword,
@@ -215,6 +235,7 @@ async def run_task(
                                 arxiv_id=paper.arxiv_id,
                                 arxiv_url=paper.arxiv_url,
                                 chatpaper_url=paper.chatpaper_url,
+                                date=paper.date,
                                 title_zh=paper.title_zh,
                                 title_en=paper.title_en,
                                 matched_keyword=keyword,
@@ -242,6 +263,7 @@ async def run_task(
                                     arxiv_id=paper.arxiv_id,
                                     arxiv_url=paper.arxiv_url,
                                     chatpaper_url=paper.chatpaper_url,
+                                    date=paper.date,
                                     title_zh=paper.title_zh,
                                     title_en=paper.title_en,
                                     matched_keyword=keyword,
@@ -265,6 +287,7 @@ async def run_task(
                                 arxiv_id=paper.arxiv_id,
                                 arxiv_url=paper.arxiv_url,
                                 chatpaper_url=paper.chatpaper_url,
+                                date=paper.date,
                                 title_zh=paper.title_zh,
                                 title_en=paper.title_en,
                                 matched_keyword=keyword,
@@ -289,6 +312,7 @@ async def run_task(
                                 arxiv_id=paper.arxiv_id,
                                 arxiv_url=paper.arxiv_url,
                                 chatpaper_url=paper.chatpaper_url,
+                                date=paper.date,
                                 title_zh=paper.title_zh,
                                 title_en=paper.title_en,
                                 matched_keyword=keyword,
