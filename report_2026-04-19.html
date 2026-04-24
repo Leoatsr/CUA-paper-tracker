@@ -185,20 +185,94 @@
   details summary::before { content: "▶ "; font-size: 10px; color: #94a3b8; }
   details[open] summary::before { content: "▼ "; }
   details[open] summary { background: #ede9fe; color: #6d28d9; }
+
+  /* sticky 顶部导航 */
+  .nav-bar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(255,255,255,0.96);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid #e5e7eb;
+    padding: 10px 16px;
+    margin: -20px -20px 24px -20px;
+    display: flex;
+    gap: 12px;
+    font-size: 13px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .nav-bar a {
+    color: #475569;
+    text-decoration: none;
+    padding: 4px 10px;
+    border-radius: 6px;
+    transition: background 0.15s;
+  }
+  .nav-bar a:hover { background: #ede9fe; color: #6d28d9; }
+
+  /* 登录徽章 */
+  .login-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .login-badge.ok { background: #d1fae5; color: #065f46; }
+  .login-badge.fail { background: #fee2e2; color: #991b1b; }
+
+  /* 字段完整性指示 */
+  .completeness-bar {
+    display: flex;
+    gap: 20px;
+    padding: 8px 14px;
+    background: #f8fafc;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #475569;
+    flex-wrap: wrap;
+  }
+  .completeness-bar strong { color: #0f172a; }
 </style>
 </head>
 <body>
 <div class="container">
 
+  <!-- sticky 导航栏 -->
+  <nav class="nav-bar">
+    <a href="#top">🏠 顶部</a>
+    <a href="#range">🧭 采集范围</a>
+    <a href="#recorded">✓ 录入明细</a>
+    <a href="#filtered">⊘ 未命中</a>
+    <a href="#timeout">⌛ 超时</a>
+  </nav>
+
   <!-- Header -->
-  <div class="header">
+  <div class="header" id="top">
     <h1>📑 论文追踪报告
-      
+      <span class="dry-run-badge">DRY-RUN 模式</span>
     </h1>
     <div class="subtitle">
       目标采集日期 <strong>2026-04-19</strong>
-      · 执行时间 2026-04-22 13:48:43 (北京时间)
+      · 执行时间 2026-04-24 17:20:21 (北京时间)
     </div>
+  </div>
+
+  <!-- A. ChatPaper 登录状态徽章 -->
+  <div style="display:flex; gap:12px; align-items:center; margin-bottom:16px; flex-wrap:wrap">
+    <span class="login-badge ok">🟢 ChatPaper 已登录 (cookies 1 条)</span>
+    
+  </div>
+
+  <!-- B. 字段完整性指示 -->
+  <div class="completeness-bar">
+    字段完整性（录入的 0 篇中）：
+    概要 <strong>—</strong> (0/0)
+    · 图片 <strong>—</strong> (0/0)
+    · project <strong>—</strong> (0/0)
   </div>
 
   <!-- 统计卡片 -->
@@ -206,7 +280,7 @@
     <div class="stat-card primary">
       <div class="accent"></div>
       <div class="label">采集总数</div>
-      <div class="value">111</div>
+      <div class="value">0</div>
     </div>
     <div class="stat-card success">
       <div class="accent"></div>
@@ -228,6 +302,11 @@
       <div class="label">飞书已有</div>
       <div class="value">0</div>
     </div>
+    <div class="stat-card gray">
+      <div class="accent"></div>
+      <div class="label">历史去重</div>
+      <div class="value">0</div>
+    </div>
     <div class="stat-card danger">
       <div class="accent"></div>
       <div class="label">飞书失败</div>
@@ -243,53 +322,8 @@
     </div>
   </div>
 
-  <!-- 采集范围 -->
-  <div class="section">
-    <h2>🧭 本次采集范围（每个关键词首末篇）</h2>
-    <table>
-      <thead>
-        <tr>
-          <th style="width:140px">关键词</th>
-          <th>第一篇</th>
-          <th>最后一篇</th>
-          <th style="width:80px">本关键词总见</th>
-        </tr>
-      </thead>
-      <tbody>
-
-        <tr>
-          <td><span class="keyword-tag">GUI Agent</span></td>
-          <td><span class="arxiv-id">2604.15972</span><div class="title-en" style="margin-top:4px">多智能体推理与协作的弱链优化</div></td>
-          <td><span class="arxiv-id">2604.15760</span><div class="title-en" style="margin-top:4px">KWBench：在知识工作中测量无提示问题识别</div></td>
-          <td style="text-align:center">31</td>
-        </tr>
-
-        <tr>
-          <td><span class="keyword-tag">Web Agent</span></td>
-          <td><span class="arxiv-id">2604.15972</span><div class="title-en" style="margin-top:4px">多智能体推理与协作的弱链优化</div></td>
-          <td><span class="arxiv-id">2604.15760</span><div class="title-en" style="margin-top:4px">KWBench：在知识工作中测量无提示问题识别</div></td>
-          <td style="text-align:center">33</td>
-        </tr>
-
-        <tr>
-          <td><span class="keyword-tag">mobile agent</span></td>
-          <td><span class="arxiv-id">2604.15357</span><div class="title-en" style="margin-top:4px">驯服异步CPU-GPU耦合以实现移动边缘的频率感知延迟估计</div></td>
-          <td><span class="arxiv-id">2604.15760</span><div class="title-en" style="margin-top:4px">KWBench：在知识工作中测量无提示问题识别</div></td>
-          <td style="text-align:center">36</td>
-        </tr>
-
-        <tr>
-          <td><span class="keyword-tag">GUI grounding</span></td>
-          <td><span class="arxiv-id">2604.15376</span><div class="title-en" style="margin-top:4px">缩放一致性：多步骤视觉定位管道中的免费信心信号</div></td>
-          <td><span class="arxiv-id">2604.15336</span><div class="title-en" style="margin-top:4px">面部表情感知提示用于同理心大语言模型辅导</div></td>
-          <td style="text-align:center">11</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
   <!-- 录入明细 -->
-  <div class="section">
+  <div class="section" id="recorded">
     <h2>✓ 录入明细 (0 篇)</h2>
     <div class="empty">今日没有论文命中关键词</div>
   </div>
@@ -314,6 +348,13 @@ new Chart(ctx, {
         label: '⊘ 未命中过滤',
         data: [0, 0, 0, 0, 0, 0],
         backgroundColor: 'rgba(148, 163, 184, 0.65)',
+        borderRadius: 6,
+        stack: 's'
+      },
+      {
+        label: '↻ 历史去重',
+        data: [0, 0, 0, 0, 0, 0],
+        backgroundColor: 'rgba(99, 102, 241, 0.55)',
         borderRadius: 6,
         stack: 's'
       },
