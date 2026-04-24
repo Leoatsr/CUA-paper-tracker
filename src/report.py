@@ -494,7 +494,7 @@ def _render_html(task_log: TaskLog) -> str:
             date_str = r.date.isoformat() if r.date else "-"
             html_parts.append(f'''
         <tr>
-          <td><div class="title-en" style="font-size:14px;color:#0f172a">{_html_escape(r.title_en or r.title_zh)}</div></td>
+          <td><div class="title-zh">{_html_escape(r.title_zh)}</div><div class="title-en">{_html_escape(r.title_en)}</div></td>
           <td style="white-space:nowrap;color:#64748b;font-size:12px">{_html_escape(date_str)}</td>
           <td style="text-align:center"><span class="count-badge count-web">{r.web_agent_count}</span></td>
           <td style="text-align:center"><span class="count-badge count-gui">{r.gui_agent_count}</span></td>
@@ -520,11 +520,12 @@ def _render_html(task_log: TaskLog) -> str:
         <tbody>
 ''')
         for r in filtered_records:
-            arxiv_link = r.arxiv_url or (f"https://arxiv.org/abs/{r.arxiv_id}" if r.arxiv_id else "")
+            # 直接用 arxiv.org/pdf 形式（你要求的 PDF 直链）
+            pdf_link = f"https://arxiv.org/pdf/{r.arxiv_id}" if r.arxiv_id else ""
             title_to_show = r.title_en or r.title_zh
             html_parts.append(f'''
           <tr>
-            <td><a class="arxiv-id link-btn" href="{_html_escape(arxiv_link)}" target="_blank">{_html_escape(r.arxiv_id)}</a></td>
+            <td><a class="arxiv-id link-btn" href="{_html_escape(pdf_link)}" target="_blank">{_html_escape(r.arxiv_id)}</a></td>
             <td><div class="title-zh">{_html_escape(title_to_show)}</div></td>
           </tr>
 ''')

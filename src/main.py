@@ -17,6 +17,16 @@ import yaml
 from dotenv import load_dotenv
 from loguru import logger
 
+# 移除 loguru 默认的彩色 stderr handler，重新配一个不带颜色的
+# 原因：GitHub Actions 日志面板不渲染 ANSI 颜色码，会显示一堆 `***32m` 乱码
+logger.remove()
+logger.add(
+    sys.stderr,
+    colorize=False,
+    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}",
+    level="INFO",
+)
+
 from .chatpaper import ChatPaperScraper
 from .dedup import HistoryStore
 from .feishu import FeishuClient

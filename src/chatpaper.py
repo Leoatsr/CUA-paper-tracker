@@ -327,14 +327,34 @@ class ChatPaperScraper:
             except Exception:
                 logger.warning(f"div.extra-content 未出现 (15s): {meta['detail_url']}")
 
-            # 2.5 再等 is-tldr 或 markdown-body 渲染进去（Core Points 内容本身）
+            # 2.5 智能等待 Core Points 内容实际填充（不只是元素出现，还要有文字）
+            #     最多 25s：登录后 chatpaper 的 AI Summary 是服务端异步渲染的，有时需要较长时间
+            #     用 wait_for_function 能在内容出现后立即返回，不用傻等
+            core_points_ready = False
             try:
-                await page.wait_for_selector(
-                    'div.answer-item.is-tldr div.markdown-body, div.extra-content div.markdown-body',
-                    timeout=10000,
+                await page.wait_for_function(
+                    """() => {
+                        const sels = [
+                            'div.answer-item.is-tldr div.markdown-body',
+                            'div.extra-content div.markdown-body'
+                        ];
+                        for (const s of sels) {
+                            const el = document.querySelector(s);
+                            if (el && el.innerText && el.innerText.trim().length > 20) {
+                                return true;
+                            }
+                        }
+                        return false;
+                    }""",
+                    timeout=25000,
                 )
+                core_points_ready = True
             except Exception:
-                logger.warning(f"Core Points 内容未渲染 (10s): {meta['detail_url']}")
+                logger.warning(f"Core Points 内容未渲染 (25s): {meta['detail_url']}")
+
+            # 2.6 如果未就绪，再给 5s 兜底等待（有时判断瞬间刚好在"超 20 字"的临界点上）
+            if not core_points_ready:
+                await page.wait_for_timeout(5000)
 
             # 3. 滚到页面中段，触发图片 lazy-load
             try:
