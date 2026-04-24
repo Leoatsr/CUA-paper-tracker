@@ -45,6 +45,21 @@ def count_cua(text: str) -> int:
     return len(re.findall(r'\bCUA\b', text))
 
 
+def count_claw_agent(text: str) -> int:
+    """统计 Claw Agent 类出现次数"""
+    return _normalize(text).count('clawagent')
+
+
+def count_ai_agent(text: str) -> int:
+    """统计 AI Agent 类出现次数"""
+    return _normalize(text).count('aiagent')
+
+
+def count_ui_agent(text: str) -> int:
+    """统计 UI Agent 类出现次数"""
+    return _normalize(text).count('uiagent')
+
+
 # 一级关键词 → 匹配函数映射
 KEYWORD_MATCHERS = {
     'GUI Agent': count_gui_agent,
@@ -53,6 +68,9 @@ KEYWORD_MATCHERS = {
     'computer use': count_computer_use,
     'mobile agent': count_mobile_agent,
     'GUI grounding': count_gui_grounding,
+    'Claw agent': count_claw_agent,
+    'ai agent': count_ai_agent,
+    'UI agent': count_ui_agent,
 }
 
 # 一级关键词列表（按 SOP 第 0.1 节顺序）
