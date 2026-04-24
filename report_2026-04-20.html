@@ -185,20 +185,94 @@
   details summary::before { content: "▶ "; font-size: 10px; color: #94a3b8; }
   details[open] summary::before { content: "▼ "; }
   details[open] summary { background: #ede9fe; color: #6d28d9; }
+
+  /* sticky 顶部导航 */
+  .nav-bar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(255,255,255,0.96);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid #e5e7eb;
+    padding: 10px 16px;
+    margin: -20px -20px 24px -20px;
+    display: flex;
+    gap: 12px;
+    font-size: 13px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .nav-bar a {
+    color: #475569;
+    text-decoration: none;
+    padding: 4px 10px;
+    border-radius: 6px;
+    transition: background 0.15s;
+  }
+  .nav-bar a:hover { background: #ede9fe; color: #6d28d9; }
+
+  /* 登录徽章 */
+  .login-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .login-badge.ok { background: #d1fae5; color: #065f46; }
+  .login-badge.fail { background: #fee2e2; color: #991b1b; }
+
+  /* 字段完整性指示 */
+  .completeness-bar {
+    display: flex;
+    gap: 20px;
+    padding: 8px 14px;
+    background: #f8fafc;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #475569;
+    flex-wrap: wrap;
+  }
+  .completeness-bar strong { color: #0f172a; }
 </style>
 </head>
 <body>
 <div class="container">
 
+  <!-- sticky 导航栏 -->
+  <nav class="nav-bar">
+    <a href="#top">🏠 顶部</a>
+    <a href="#range">🧭 采集范围</a>
+    <a href="#recorded">✓ 录入明细</a>
+    <a href="#filtered">⊘ 未命中</a>
+    <a href="#timeout">⌛ 超时</a>
+  </nav>
+
   <!-- Header -->
-  <div class="header">
+  <div class="header" id="top">
     <h1>📑 论文追踪报告
       
     </h1>
     <div class="subtitle">
       目标采集日期 <strong>2026-04-20</strong>
-      · 执行时间 2026-04-21 02:34:35 (北京时间)
+      · 执行时间 2026-04-24 15:35:15 (北京时间)
     </div>
+  </div>
+
+  <!-- A. ChatPaper 登录状态徽章 -->
+  <div style="display:flex; gap:12px; align-items:center; margin-bottom:16px; flex-wrap:wrap">
+    <span class="login-badge ok">🟢 ChatPaper 已登录 (cookies 1 条)</span>
+    
+  </div>
+
+  <!-- B. 字段完整性指示 -->
+  <div class="completeness-bar">
+    字段完整性（录入的 2 篇中）：
+    概要 <strong>100%</strong> (2/2)
+    · 图片 <strong>100%</strong> (2/2)
+    · project <strong>50%</strong> (1/2)
   </div>
 
   <!-- 统计卡片 -->
@@ -206,17 +280,17 @@
     <div class="stat-card primary">
       <div class="accent"></div>
       <div class="label">采集总数</div>
-      <div class="value">159</div>
+      <div class="value">27</div>
     </div>
     <div class="stat-card success">
       <div class="accent"></div>
       <div class="label">命中录入</div>
-      <div class="value">9</div>
+      <div class="value">2</div>
     </div>
     <div class="stat-card gray">
       <div class="accent"></div>
       <div class="label">未命中过滤</div>
-      <div class="value">76</div>
+      <div class="value">25</div>
     </div>
     <div class="stat-card warn">
       <div class="accent"></div>
@@ -226,6 +300,11 @@
     <div class="stat-card gray">
       <div class="accent"></div>
       <div class="label">飞书已有</div>
+      <div class="value">0</div>
+    </div>
+    <div class="stat-card gray">
+      <div class="accent"></div>
+      <div class="label">历史去重</div>
       <div class="value">0</div>
     </div>
     <div class="stat-card danger">
@@ -243,683 +322,200 @@
     </div>
   </div>
 
-  <!-- 录入明细 -->
-  <div class="section">
-    <h2>✓ 录入明细 (9 篇)</h2>
-
+  <!-- 采集范围 -->
+  <div class="section" id="range">
+    <h2>🧭 本次采集范围（每个关键词首末篇）</h2>
     <table>
       <thead>
         <tr>
-          <th>arXiv</th>
-          <th>标题</th>
-          <th>命中</th>
-          <th>web_agent</th>
-          <th>gui_agent</th>
-          <th>机构</th>
-          <th style="width:90px">链接</th>
+          <th style="width:140px">关键词</th>
+          <th>第一篇</th>
+          <th>最后一篇</th>
+          <th style="width:80px">本关键词总见</th>
         </tr>
       </thead>
       <tbody>
 
         <tr>
-          <td class="arxiv-id">2604.15840</td>
-          <td>
-            <div class="title-zh">CoEvolve：通过代理-数据互进化训练大型语言模型代理</div>
-            <div class="title-en">CoEvolve: Training LLM Agents via Agent-Data Mutual Evolution</div>
-          </td>
           <td><span class="keyword-tag">GUI Agent</span></td>
-          <td><span class="count-badge count-web">1</span></td>
-          <td><span class="count-badge count-gui">0</span></td>
-          <td class="institutions">AMAP; Alibaba Group</td>
-          <td><a class="link-btn" href="https://chatpaper.com/zh-CN/paper/269672?from=subpath-search" target="_blank">ChatPaper →</a></td>
+          <td><span class="arxiv-id">2604.17284</span><div class="title-en" style="margin-top:4px">HalluClear：诊断、评估和缓解图形用户界面代理中的幻觉</div></td>
+          <td><span class="arxiv-id">2604.17557</span><div class="title-en" style="margin-top:4px">因果时间事件图：递归代理执行轨迹的形式模型</div></td>
+          <td style="text-align:center">27</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 录入明细 -->
+  <div class="section" id="recorded">
+    <h2>✓ 录入明细 (2 篇)</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th style="width:110px">发布日期</th>
+          <th style="width:90px">web_agent</th>
+          <th style="width:90px">gui_agent</th>
+          <th>机构</th>
+          <th style="width:110px">链接</th>
+        </tr>
+      </thead>
+      <tbody>
+
+        <tr>
+          <td><div class="title-zh">HalluClear：诊断、评估和缓解图形用户界面代理中的幻觉</div><div class="title-en">HalluClear: Diagnosing, Evaluating and Mitigating Hallucinations in GUI Agents</div></td>
+          <td style="white-space:nowrap;color:#64748b;font-size:12px">2026-04-19</td>
+          <td style="text-align:center"><span class="count-badge count-web">0</span></td>
+          <td style="text-align:center"><span class="count-badge count-gui">43</span></td>
+          <td class="institutions">Chinese Academy of Sciences; School of Artificial Intelligence, UCAS; Meituan</td>
+          <td><a class="link-btn" href="https://chatpaper.com/zh-CN/paper/270212?from=subpath-search" target="_blank">ChatPaper →</a></td>
         </tr>
 
         <tr>
-          <td class="arxiv-id">2604.15376</td>
-          <td>
-            <div class="title-zh">缩放一致性：多步骤视觉定位管道中的免费信心信号</div>
-            <div class="title-en">Zoom Consistency: A Free Confidence Signal in Multi-Step Visual Grounding Pipelines</div>
-          </td>
-          <td><span class="keyword-tag">GUI Agent</span></td>
-          <td><span class="count-badge count-web">0</span></td>
-          <td><span class="count-badge count-gui">7</span></td>
-          <td class="institutions">Om Labs</td>
-          <td><a class="link-btn" href="https://chatpaper.com/zh-CN/paper/269640?from=subpath-search" target="_blank">ChatPaper →</a></td>
-        </tr>
-
-        <tr>
-          <td class="arxiv-id">2604.15579</td>
-          <td>
-            <div class="title-zh">领域特定代理的符号护栏：在不牺牲实用性的情况下提供更强的安全性和保障</div>
-            <div class="title-en">Symbolic Guardrails for Domain-Specific Agents: Stronger Safety and Security Guarantees Without Sacrificing Utility</div>
-          </td>
-          <td><span class="keyword-tag">GUI Agent</span></td>
-          <td><span class="count-badge count-web">3</span></td>
-          <td><span class="count-badge count-gui">0</span></td>
-          <td class="institutions">Carnegie Mellon University</td>
-          <td><a class="link-btn" href="https://chatpaper.com/zh-CN/paper/269625?from=subpath-search" target="_blank">ChatPaper →</a></td>
-        </tr>
-
-        <tr>
-          <td class="arxiv-id">2604.15877</td>
-          <td>
-            <div class="title-zh">体验压缩谱：在大型语言模型代理中统一记忆、技能和规则</div>
-            <div class="title-en">Experience Compression Spectrum: Unifying Memory, Skills, and Rules in LLM Agents</div>
-          </td>
-          <td><span class="keyword-tag">GUI Agent</span></td>
-          <td><span class="count-badge count-web">1</span></td>
-          <td><span class="count-badge count-gui">0</span></td>
-          <td class="institutions">AWS Generative AI Innovation Center; HSBC Technology Center</td>
-          <td><a class="link-btn" href="https://chatpaper.com/zh-CN/paper/269563?from=subpath-search" target="_blank">ChatPaper →</a></td>
-        </tr>
-
-        <tr>
-          <td class="arxiv-id">2604.15415</td>
-          <td>
-            <div class="title-zh">有害技能基准：有害技能如何武器化你的代理人？</div>
-            <div class="title-en">HarmfulSkillBench: How Do Harmful Skills Weaponize Your Agents?</div>
-          </td>
-          <td><span class="keyword-tag">GUI Agent</span></td>
-          <td><span class="count-badge count-web">3</span></td>
-          <td><span class="count-badge count-gui">0</span></td>
-          <td class="institutions">CISPA Helmholtz Center for Information Security</td>
-          <td><a class="link-btn" href="https://chatpaper.com/zh-CN/paper/269634?from=subpath-search" target="_blank">ChatPaper →</a></td>
-        </tr>
-
-        <tr>
-          <td class="arxiv-id">2604.15719</td>
-          <td>
-            <div class="title-zh">世界泄露未来：利用进化驱动未来预测代理</div>
-            <div class="title-en">The World Leaks the Future: Harness Evolution for Future Prediction Agents</div>
-          </td>
-          <td><span class="keyword-tag">GUI Agent</span></td>
-          <td><span class="count-badge count-web">1</span></td>
-          <td><span class="count-badge count-gui">0</span></td>
-          <td class="institutions">University of Science and Technology of China; Zhongguancun Academy; Tsinghua University</td>
-          <td><a class="link-btn" href="https://chatpaper.com/zh-CN/paper/269568?from=subpath-search" target="_blank">ChatPaper →</a></td>
-        </tr>
-
-        <tr>
-          <td class="arxiv-id">2604.15505</td>
-          <td>
-            <div class="title-zh">政策库：为大型语言模型代理演变政策理解</div>
-            <div class="title-en">PolicyBank: Evolving Policy Understanding for LLM Agents</div>
-          </td>
-          <td><span class="keyword-tag">GUI Agent</span></td>
-          <td><span class="count-badge count-web">4</span></td>
-          <td><span class="count-badge count-gui">0</span></td>
-          <td class="institutions">Google Cloud; University of Wisconsin-Madison</td>
-          <td><a class="link-btn" href="https://chatpaper.com/zh-CN/paper/269628?from=subpath-search" target="_blank">ChatPaper →</a></td>
-        </tr>
-
-        <tr>
-          <td class="arxiv-id">2604.15715</td>
-          <td>
-            <div class="title-zh">GTA-2：从原子工具使用到开放式工作流程的通用工具代理基准测试</div>
-            <div class="title-en">GTA-2: Benchmarking General Tool Agents from Atomic Tool-Use to Open-Ended Workflows</div>
-          </td>
-          <td><span class="keyword-tag">GUI Agent</span></td>
-          <td><span class="count-badge count-web">0</span></td>
-          <td><span class="count-badge count-gui">1</span></td>
-          <td class="institutions">Shanghai Jiao Tong University; Shanghai AI Laboratory; Tencent; Nanyang Technological University</td>
-          <td><a class="link-btn" href="https://chatpaper.com/zh-CN/paper/269612?from=subpath-search" target="_blank">ChatPaper →</a></td>
-        </tr>
-
-        <tr>
-          <td class="arxiv-id">2604.15597</td>
-          <td>
-            <div class="title-zh">当你委托时，大型语言模型会损坏你的文档。</div>
-            <div class="title-en">LLMs Corrupt Your Documents When You Delegate</div>
-          </td>
-          <td><span class="keyword-tag">computer use</span></td>
-          <td><span class="count-badge count-web">1</span></td>
-          <td><span class="count-badge count-gui">0</span></td>
-          <td class="institutions">Microsoft Research</td>
-          <td><a class="link-btn" href="https://chatpaper.com/zh-CN/paper/269688?from=subpath-search" target="_blank">ChatPaper →</a></td>
+          <td><div class="title-zh">代理世界：为不断发展的通用智能体智能扩展真实环境合成</div><div class="title-en">Agent-World: Scaling Real-World Environment Synthesis for Evolving General Agent Intelligence</div></td>
+          <td style="white-space:nowrap;color:#64748b;font-size:12px">2026-04-20</td>
+          <td style="text-align:center"><span class="count-badge count-web">6</span></td>
+          <td style="text-align:center"><span class="count-badge count-gui">1</span></td>
+          <td class="institutions">Renmin University of China; ByteDance Seed</td>
+          <td><a class="link-btn" href="https://chatpaper.com/zh-CN/paper/270152?from=subpath-search" target="_blank">ChatPaper →</a></td>
         </tr>
       </tbody>
     </table>
   </div>
 
   <!-- 过滤明细（折叠）-->
-  <div class="section">
-    <h2>⊘ 未命中过滤 (76 篇)</h2>
+  <div class="section" id="filtered">
+    <h2>⊘ 未命中过滤 (25 篇)</h2>
     <details>
-      <summary>展开查看全部 76 篇未命中关键词的论文</summary>
+      <summary>展开查看全部 25 篇未命中关键词的论文</summary>
       <table style="margin-top:12px">
-        <thead><tr><th>arXiv</th><th>标题</th><th>web_agent</th><th>gui_agent</th></tr></thead>
+        <thead><tr><th style="width:140px">arXiv</th><th>Title</th></tr></thead>
         <tbody>
 
           <tr>
-            <td class="arxiv-id">2604.15972</td>
-            <td><div class="title-zh">多智能体推理与协作的弱链优化</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2604.18071" target="_blank">2604.18071</a></td>
+            <td><div class="title-zh">Architectural Design Decisions in AI Agent Harnesses</div></td>
           </tr>
 
           <tr>
-            <td class="arxiv-id">2604.16175</td>
-            <td><div class="title-zh">MARCH：多智能体放射学临床层级用于CT报告生成</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2604.16543" target="_blank">2604.16543</a></td>
+            <td><div class="title-zh">Conjunctive Prompt Attacks in Multi-Agent LLM Systems</div></td>
           </tr>
 
           <tr>
-            <td class="arxiv-id">2604.15559</td>
-            <td><div class="title-zh">AI代理蒸馏中不安全行为的潜意识转移</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2604.18564" target="_blank">2604.18564</a></td>
+            <td><div class="title-zh">MultiWorld: Scalable Multi-Agent Multi-View Video World Models</div></td>
           </tr>
 
           <tr>
-            <td class="arxiv-id">2604.15709</td>
-            <td><div class="title-zh">通过蒙特卡洛树搜索进行代理技能的双层优化</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2604.18190" target="_blank">2604.18190</a></td>
+            <td><div class="title-zh">Scalable Neighborhood-Based Multi-Agent Actor-Critic</div></td>
           </tr>
 
           <tr>
-            <td class="arxiv-id">2604.16022</td>
-            <td><div class="title-zh">SocialGrid：一个用于规划和社会推理的基准测试，适用于具身多智能体系统</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2604.17400" target="_blank">2604.17400</a></td>
+            <td><div class="title-zh">Phase-Scheduled Multi-Agent Systems for Token-Efficient Coordination</div></td>
           </tr>
 
           <tr>
-            <td class="arxiv-id">2604.16024</td>
-            <td><div class="title-zh">AstroVLM：专家级多智能体协作推理用于天文成像质量诊断</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2604.17327" target="_blank">2604.17327</a></td>
+            <td><div class="title-zh">Signal or Noise in Multi-Agent LLM-based Stock Recommendations?</div></td>
           </tr>
 
           <tr>
-            <td class="arxiv-id">2604.15327</td>
-            <td><div class="title-zh">生态蜜蜂：一个个性化的多模态智能体，用于提升学生的气候意识和校园生态系统中的可持续行为</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2604.18557" target="_blank">2604.18557</a></td>
+            <td><div class="title-zh">SynAgent: Generalizable Cooperative Humanoid Manipulation via Solo-to-Cooperative Agent Synergy</div></td>
           </tr>
 
           <tr>
-            <td class="arxiv-id">2604.15695</td>
-            <td><div class="title-zh">偏执的代价：非平稳多智能体强化学习中的稳健风险敏感合作</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2604.17191" target="_blank">2604.17191</a></td>
+            <td><div class="title-zh">Do LLM-derived graph priors improve multi-agent coordination?</div></td>
           </tr>
 
           <tr>
-            <td class="arxiv-id">2604.15687</td>
-            <td><div class="title-zh">通过对手建模进行多智能体谈判中的偏好估计</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2604.17309" target="_blank">2604.17309</a></td>
+            <td><div class="title-zh">Knows: Agent-Native Structured Research Representations</div></td>
           </tr>
 
           <tr>
-            <td class="arxiv-id">2604.15319</td>
-            <td><div class="title-zh">可解释的迭代数据可视化优化通过大型语言模型代理</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2604.17353" target="_blank">2604.17353</a></td>
+            <td><div class="title-zh">Hive: A Multi-Agent Infrastructure for Algorithm- and Task-Level Scaling</div></td>
           </tr>
 
           <tr>
-            <td class="arxiv-id">2604.15713</td>
-            <td><div class="title-zh">在Isabelle中输入它！人工智能代理从人类提示中起草、机械化和概括</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2604.17708" target="_blank">2604.17708</a></td>
+            <td><div class="title-zh">Co-evolving Agent Architectures and Interpretable Reasoning for Automated Optimization</div></td>
           </tr>
 
           <tr>
-            <td class="arxiv-id">2604.16205</td>
-            <td><div class="title-zh">ChemGraph-XANES：一种用于XANES模拟和分析的代理框架</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2604.17658" target="_blank">2604.17658</a></td>
+            <td><div class="title-zh">Towards Self-Improving Error Diagnosis in Multi-Agent Systems</div></td>
           </tr>
 
           <tr>
-            <td class="arxiv-id">2604.15757</td>
-            <td><div class="title-zh">多目标强化学习与增强状态在部署后需要奖励</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2604.17950" target="_blank">2604.17950</a></td>
+            <td><div class="title-zh">CADMAS-CTX: Contextual Capability Calibration for Multi-Agent Delegation</div></td>
           </tr>
 
           <tr>
-            <td class="arxiv-id">2604.15373</td>
-            <td><div class="title-zh">信息棋：一种对抗推理的游戏和可量化信息控制的实验室</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2604.18240" target="_blank">2604.18240</a></td>
+            <td><div class="title-zh">AJ-Bench: Benchmarking Agent-as-a-Judge for Environment-Aware Evaluation</div></td>
           </tr>
 
           <tr>
-            <td class="arxiv-id">2604.15774</td>
-            <td><div class="title-zh">MemEvoBench：大规模语言模型代理中的记忆误演化基准测试</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2604.16987" target="_blank">2604.16987</a></td>
+            <td><div class="title-zh">DVAR: Adversarial Multi-Agent Debate for Video Authenticity Detection</div></td>
           </tr>
 
           <tr>
-            <td class="arxiv-id">2604.15388</td>
-            <td><div class="title-zh">探索基于大型语言模型的Verilog代码生成，结合数据高效微调和测试平台自动化</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2604.17240" target="_blank">2604.17240</a></td>
+            <td><div class="title-zh">Safe and Policy-Compliant Multi-Agent Orchestration for Enterprise AI</div></td>
           </tr>
 
           <tr>
-            <td class="arxiv-id">2604.15951</td>
-            <td><div class="title-zh">整合图形、语言模型和智能体：推理与检索</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2604.17503" target="_blank">2604.17503</a></td>
+            <td><div class="title-zh">SkillGraph: Self-Evolving Multi-Agent Collaboration with Multimodal Graph Topology</div></td>
           </tr>
 
           <tr>
-            <td class="arxiv-id">2604.16298</td>
-            <td><div class="title-zh">FineCog-Nav：集成细粒度认知模块以实现零样本多模态无人机导航</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2604.17517" target="_blank">2604.17517</a></td>
+            <td><div class="title-zh">From Admission to Invariants: Measuring Deviation in Delegated Agent Systems</div></td>
           </tr>
 
           <tr>
-            <td class="arxiv-id">2604.15622</td>
-            <td><div class="title-zh">AdaVFM：通过大型语言模型引导执行的边缘智能自适应视觉基础模型</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2604.17989" target="_blank">2604.17989</a></td>
+            <td><div class="title-zh">AIT Academy: Cultivating the Complete Agent with a Confucian Three-Domain Curriculum</div></td>
           </tr>
 
           <tr>
-            <td class="arxiv-id">2604.15917</td>
-            <td><div class="title-zh">通过自适应任务重构与自主执行简化图像编辑</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2604.16762" target="_blank">2604.16762</a></td>
+            <td><div class="title-zh">CapSeal: Capability-Sealed Secret Mediation for Secure Agent Execution</div></td>
           </tr>
 
           <tr>
-            <td class="arxiv-id">2604.15762</td>
-            <td><div class="title-zh">无人机群中的零样本可扩展韧性：一种基于物理信息图交互的去中心化模仿学习框架</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2604.17745" target="_blank">2604.17745</a></td>
+            <td><div class="title-zh">HiRAS: A Hierarchical Multi-Agent Framework for Paper-to-Code Generation and Execution</div></td>
           </tr>
 
           <tr>
-            <td class="arxiv-id">2604.15336</td>
-            <td><div class="title-zh">面部表情感知提示用于同理心大语言模型辅导</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2604.16333" target="_blank">2604.16333</a></td>
+            <td><div class="title-zh">A Discordance-Aware Multimodal Framework with Multi-Agent Clinical Reasoning</div></td>
           </tr>
 
           <tr>
-            <td class="arxiv-id">2604.15558</td>
-            <td><div class="title-zh">预注册信念修正合同</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2604.17148" target="_blank">2604.17148</a></td>
+            <td><div class="title-zh">Graph-of-Agents: A Graph-based Framework for Multi-Agent LLM Collaboration</div></td>
           </tr>
 
           <tr>
-            <td class="arxiv-id">2604.15760</td>
-            <td><div class="title-zh">KWBench：在知识工作中测量无提示问题识别</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2604.17186" target="_blank">2604.17186</a></td>
+            <td><div class="title-zh">Persona-Based Requirements Engineering for Explainable Multi-Agent Educational Systems: A Scenario Simulator for Clinical Reasoning Training</div></td>
           </tr>
 
           <tr>
-            <td class="arxiv-id">2604.15699</td>
-            <td><div class="title-zh">基于频率损坏的图自监督学习</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15663</td>
-            <td><div class="title-zh">CodeMMR：自然语言、代码与图像的统一检索桥梁</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.16243</td>
-            <td><div class="title-zh">查找、修复、推理：视频推理的上下文修复</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15646</td>
-            <td><div class="title-zh">FD-NL2SQL：基于反馈的临床NL2SQL，随着使用而不断改进</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15331</td>
-            <td><div class="title-zh">人们如何使用健康助手</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.16119</td>
-            <td><div class="title-zh">单变量通道融合用于多变量时间序列分类</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15990</td>
-            <td><div class="title-zh">从脆弱的数据主体到使人脆弱的数据实践：在基于人工智能的平台化生活分析中导航保护悖论</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2308.10562</td>
-            <td><div class="title-zh">看见无形：图像分类的高层次与抽象类别调查</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15366</td>
-            <td><div class="title-zh">OverCite：在不离开编辑器的情况下添加LaTeX引用</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15347</td>
-            <td><div class="title-zh">SocialWise：针对自闭症谱系障碍个体的LLM代理对话疗法，以提升沟通技能</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.16284</td>
-            <td><div class="title-zh">增强模糊野生动物图像：AnimalHaze3k 和 IncepDehazeGan</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.16010</td>
-            <td><div class="title-zh">IA-CLAHE：图像自适应对比度限制估计用于CLAHE</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.16147</td>
-            <td><div class="title-zh">SWNet：一种用于伪装杂草检测的跨光谱网络</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.16258</td>
-            <td><div class="title-zh">特征化大型语言模型生成的能力问题：使用开放和封闭模型的跨领域实证研究</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15589</td>
-            <td><div class="title-zh">针对自动化代码合规的不同微调策略和模型规模的LLM归因分析</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15590</td>
-            <td><div class="title-zh">CSLE：一种用于自主安全管理的强化学习平台</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15335</td>
-            <td><div class="title-zh">关于传统学习与互动学习对学生学业表现和情感健康影响的比较研究</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.16220</td>
-            <td><div class="title-zh">地图上的OT：量化地理空间中的领域转移</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15495</td>
-            <td><div class="title-zh">要点：通过智能语义拓扑进行多模态知识提取和空间定位</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.16182</td>
-            <td><div class="title-zh">使用生成模型在加密货币中生成合成数据</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15964</td>
-            <td><div class="title-zh">基于拓扑驱动的nnU-Net与MedNeXt融合，用于在撒哈拉以南非洲数据集上进行准确的脑肿瘤分割</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.16075</td>
-            <td><div class="title-zh">朝向线性系统求解器中反向误差的普遍收敛性</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15533</td>
-            <td><div class="title-zh">验证模态测试库合约</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15344</td>
-            <td><div class="title-zh">对大型语言模型（LLM）的选择：设计师和开发者如何将LLM视为工具或团队成员</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15483</td>
-            <td><div class="title-zh">：一种可操控的通用机器人基础模型，具备新兴能力</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.16171</td>
-            <td><div class="title-zh">JumpLoRA：大语言模型中用于持续学习的稀疏适配器</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15744</td>
-            <td><div class="title-zh">语言、地点与社交媒体：新西兰的地理方言对齐</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15958</td>
-            <td><div class="title-zh">关于RAG管道中匿名化影响的案例研究</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15316</td>
-            <td><div class="title-zh">人类与大型语言模型互动中的拟人化与信任</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.16217</td>
-            <td><div class="title-zh">超越表面统计：通过内部表征为大型语言模型提供稳健的保形预测</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15332</td>
-            <td><div class="title-zh">使用视觉语言模型自动生成碰撞图：多车道环形交叉口的案例研究</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.16004</td>
-            <td><div class="title-zh">AgentV-RL：通过自主验证者扩展奖励建模</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.16132</td>
-            <td><div class="title-zh">大型语言模型能否理解创伤的影响？大型语言模型对枪支暴力幸存者访谈编码的成本与收益</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15573</td>
-            <td><div class="title-zh">通过用户和项目嵌入的加权相似性进行协同过滤</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.16135</td>
-            <td><div class="title-zh">运动适配器：一种用于复合动作文本到运动生成的扩散模型适配器</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15923</td>
-            <td><div class="title-zh">层次化编解码扩散用于视频到语音生成</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15681</td>
-            <td><div class="title-zh">自监督角度去模糊在光声重建中的应用：Noisier2Inverse</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15499</td>
-            <td><div class="title-zh">安全路由器：高效安全推理的加密路由</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15370</td>
-            <td><div class="title-zh">TopFeaRe：关于拓扑特征纠缠的图形对抗韧性关键状态定位</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15856</td>
-            <td><div class="title-zh">在缺失或完整模态下，通过结构化潜在投影实现稳健的多光谱语义分割</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15343</td>
-            <td><div class="title-zh">当循环闭合时：人类-大型语言模型系统中的上下文隔离的建筑限制、元认知的共用以及双目标设计问题</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15750</td>
-            <td><div class="title-zh">DepCap：用于高效扩散语言模型推理的自适应块级并行解码</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15775</td>
-            <td><div class="title-zh">量子增强长短期记忆网络的联邦学习在高能物理中的应用</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15357</td>
-            <td><div class="title-zh">驯服异步CPU-GPU耦合以实现移动边缘的频率感知延迟估计</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15341</td>
-            <td><div class="title-zh">MRGEN：一种基于大型语言模型的混合现实教育创作工具的概念框架</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.16201</td>
-            <td><div class="title-zh">德纳利：一个支持低成本激光雷达进行非视距空间推理的数据集</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15808</td>
-            <td><div class="title-zh">超越单一帧：跨体积MRI的多帧空间基础推理</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15736</td>
-            <td><div class="title-zh">裁判席：视频多语言大模型是否准备好成为多项运动的裁判</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15809</td>
-            <td><div class="title-zh">对齐视觉-语言模型所见与感知的自适应信息流</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.16076</td>
-            <td><div class="title-zh">原型基础的概念模型用于可验证的概念对齐</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15771</td>
-            <td><div class="title-zh">技能-RAG：通过隐状态探测和技能路由实现的故障状态感知检索增强</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
-          </tr>
-
-          <tr>
-            <td class="arxiv-id">2604.15804</td>
-            <td><div class="title-zh">Qwen3.5-Omni技术报告</div></td>
-            <td><span class="count-badge count-web">0</span></td>
-            <td><span class="count-badge count-gui">0</span></td>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2604.17557" target="_blank">2604.17557</a></td>
+            <td><div class="title-zh">Causal-Temporal Event Graphs: A Formal Model for Recursive Agent Execution Traces</div></td>
           </tr>
         </tbody>
       </table>
@@ -937,15 +533,22 @@ new Chart(ctx, {
     datasets: [
       {
         label: '✓ 命中录入',
-        data: [8, 0, 0, 1, 0, 0],
+        data: [2, 0, 0, 0, 0, 0],
         backgroundColor: 'rgba(16, 185, 129, 0.85)',
         borderRadius: 6,
         stack: 's'
       },
       {
         label: '⊘ 未命中过滤',
-        data: [24, 3, 0, 40, 3, 6],
+        data: [25, 0, 0, 0, 0, 0],
         backgroundColor: 'rgba(148, 163, 184, 0.65)',
+        borderRadius: 6,
+        stack: 's'
+      },
+      {
+        label: '↻ 历史去重',
+        data: [0, 0, 0, 0, 0, 0],
+        backgroundColor: 'rgba(99, 102, 241, 0.55)',
         borderRadius: 6,
         stack: 's'
       },
