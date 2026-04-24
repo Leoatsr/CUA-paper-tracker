@@ -67,10 +67,11 @@ class ChatPaperScraper:
     )
     MAX_PAGES = 30  # 防御：超过就停，避免无限翻
 
-    def __init__(self, headless: bool = True, navigation_timeout_ms: int = 60000, cookies_json: str = None):
+    def __init__(self, headless: bool = True, navigation_timeout_ms: int = 180000, cookies_json: str = None):
         """
         :param cookies_json: ChatPaper 的 cookies JSON 字符串（Cookie-Editor 导出的 JSON 数组格式）
                              None 或空字符串则不注入，走未登录流程
+        :param navigation_timeout_ms: 页面导航超时（ms）。chatpaper 在海外 IP 下响应很慢，默认 180s
         """
         self.headless = headless
         self.nav_timeout = navigation_timeout_ms
@@ -181,12 +182,30 @@ class ChatPaperScraper:
             for page_num in range(1, self.MAX_PAGES + 1):
                 url = self._build_search_url(keyword, page_num)
                 logger.info(f"[{keyword}] 访问第 {page_num} 页: {url}")
-                try:
-                    await page.goto(url, wait_until='domcontentloaded', timeout=self.nav_timeout)
-                    await page.wait_for_timeout(3500)  # 等 Vue 渲染卡片
-                except Exception as e:
-                    logger.error(f"[{keyword}] 页面加载失败 page={page_num}: {e}")
+
+                # chatpaper 海外响应慢: 用 'commit' 等策略（只等服务器开始响应）
+                # 失败时重试 1 次，间隔 10s。主要对抗 DNS/TLS 握手慢或 CDN 抖动。
+                page_loaded = False
+                for attempt in (1, 2):
+                    try:
+                        await page.goto(url, wait_until='commit', timeout=self.nav_timeout)
+                        page_loaded = True
+                        break
+                    except Exception as e:
+                        if attempt == 1:
+                            logger.warning(
+                                f"[{keyword}] 第 {page_num} 页加载失败，10s 后重试 (attempt 1/2): {type(e).__name__}"
+                            )
+                            await asyncio.sleep(10)
+                        else:
+                            logger.error(
+                                f"[{keyword}] 第 {page_num} 页重试 2 次仍失败: {e}"
+                            )
+                if not page_loaded:
                     break
+
+                # 给 DOM 初步渲染 + Vue 把卡片挂上去一点时间
+                await page.wait_for_timeout(5000)
 
                 # 等卡片出现
                 try:
@@ -312,7 +331,7 @@ class ChatPaperScraper:
         """打开详情页，抽取 Paper 全部字段"""
         page = await self._context.new_page()
         try:
-            await page.goto(meta['detail_url'], wait_until='domcontentloaded', timeout=self.nav_timeout)
+            await page.goto(meta['detail_url'], wait_until='commit', timeout=self.nav_timeout)
 
             # 1. 主动等 Abstract 出现（页面骨架）
             try:
