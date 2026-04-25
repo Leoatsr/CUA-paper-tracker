@@ -229,3 +229,4 @@ jobs:
             git commit -m "Deploy report $(date -u +%Y-%m-%d)"
             git push origin gh-pages
           fi
+
