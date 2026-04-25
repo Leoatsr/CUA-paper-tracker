@@ -185,20 +185,94 @@
   details summary::before { content: "▶ "; font-size: 10px; color: #94a3b8; }
   details[open] summary::before { content: "▼ "; }
   details[open] summary { background: #ede9fe; color: #6d28d9; }
+
+  /* sticky 顶部导航 */
+  .nav-bar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(255,255,255,0.96);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid #e5e7eb;
+    padding: 10px 16px;
+    margin: -20px -20px 24px -20px;
+    display: flex;
+    gap: 12px;
+    font-size: 13px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .nav-bar a {
+    color: #475569;
+    text-decoration: none;
+    padding: 4px 10px;
+    border-radius: 6px;
+    transition: background 0.15s;
+  }
+  .nav-bar a:hover { background: #ede9fe; color: #6d28d9; }
+
+  /* 登录徽章 */
+  .login-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .login-badge.ok { background: #d1fae5; color: #065f46; }
+  .login-badge.fail { background: #fee2e2; color: #991b1b; }
+
+  /* 字段完整性指示 */
+  .completeness-bar {
+    display: flex;
+    gap: 20px;
+    padding: 8px 14px;
+    background: #f8fafc;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #475569;
+    flex-wrap: wrap;
+  }
+  .completeness-bar strong { color: #0f172a; }
 </style>
 </head>
 <body>
 <div class="container">
 
+  <!-- sticky 导航栏 -->
+  <nav class="nav-bar">
+    <a href="#top">🏠 顶部</a>
+    <a href="#range">🧭 采集范围</a>
+    <a href="#recorded">✓ 录入明细</a>
+    <a href="#filtered">⊘ 未命中</a>
+    <a href="#timeout">⌛ 超时</a>
+  </nav>
+
   <!-- Header -->
-  <div class="header">
+  <div class="header" id="top">
     <h1>📑 论文追踪报告
       
     </h1>
     <div class="subtitle">
       目标采集日期 <strong>2026-04-17</strong>
-      · 执行时间 2026-04-19 12:25:47 (北京时间)
+      · 执行时间 2026-04-25 09:55:54 (北京时间)
     </div>
+  </div>
+
+  <!-- A. ChatPaper 登录状态徽章 -->
+  <div style="display:flex; gap:12px; align-items:center; margin-bottom:16px; flex-wrap:wrap">
+    <span class="login-badge ok">🟢 ChatPaper 已登录 (cookies 1 条)</span>
+    
+  </div>
+
+  <!-- B. 字段完整性指示 -->
+  <div class="completeness-bar">
+    字段完整性（录入的 0 篇中）：
+    概要 <strong>—</strong> (0/0)
+    · 图片 <strong>—</strong> (0/0)
+    · project <strong>—</strong> (0/0)
   </div>
 
   <!-- 统计卡片 -->
@@ -228,6 +302,11 @@
       <div class="label">飞书已有</div>
       <div class="value">0</div>
     </div>
+    <div class="stat-card gray">
+      <div class="accent"></div>
+      <div class="label">历史去重</div>
+      <div class="value">0</div>
+    </div>
     <div class="stat-card danger">
       <div class="accent"></div>
       <div class="label">飞书失败</div>
@@ -244,7 +323,7 @@
   </div>
 
   <!-- 录入明细 -->
-  <div class="section">
+  <div class="section" id="recorded">
     <h2>✓ 录入明细 (0 篇)</h2>
     <div class="empty">今日没有论文命中关键词</div>
   </div>
@@ -256,25 +335,32 @@ const ctx = document.getElementById('kwChart').getContext('2d');
 new Chart(ctx, {
   type: 'bar',
   data: {
-    labels: ["GUI Agent", "Web Agent", "CUA", "computer use", "mobile agent", "GUI grounding"],
+    labels: ["GUI Agent", "Web Agent", "CUA", "computer use", "mobile agent", "GUI grounding", "Claw agent", "ai agent", "UI agent"],
     datasets: [
       {
         label: '✓ 命中录入',
-        data: [0, 0, 0, 0, 0, 0],
+        data: [0, 0, 0, 0, 0, 0, 0, 0, 0],
         backgroundColor: 'rgba(16, 185, 129, 0.85)',
         borderRadius: 6,
         stack: 's'
       },
       {
         label: '⊘ 未命中过滤',
-        data: [0, 0, 0, 0, 0, 0],
+        data: [0, 0, 0, 0, 0, 0, 0, 0, 0],
         backgroundColor: 'rgba(148, 163, 184, 0.65)',
         borderRadius: 6,
         stack: 's'
       },
       {
+        label: '↻ 历史去重',
+        data: [0, 0, 0, 0, 0, 0, 0, 0, 0],
+        backgroundColor: 'rgba(99, 102, 241, 0.55)',
+        borderRadius: 6,
+        stack: 's'
+      },
+      {
         label: '⌛ PDF 超时',
-        data: [0, 0, 0, 0, 0, 0],
+        data: [0, 0, 0, 0, 0, 0, 0, 0, 0],
         backgroundColor: 'rgba(245, 158, 11, 0.85)',
         borderRadius: 6,
         stack: 's'
