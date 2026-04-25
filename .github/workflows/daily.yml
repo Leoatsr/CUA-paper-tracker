@@ -28,7 +28,7 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 300
 
     # 允许写仓库和 gh-pages 分支
     permissions:
