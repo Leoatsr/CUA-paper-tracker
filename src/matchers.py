@@ -69,7 +69,6 @@ KEYWORD_MATCHERS = {
     'mobile agent': count_mobile_agent,
     'GUI grounding': count_gui_grounding,
     'Claw agent': count_claw_agent,
-    'ai agent': count_ai_agent,
     'UI agent': count_ui_agent,
 }
 
