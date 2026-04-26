@@ -141,8 +141,9 @@ jobs:
           retention-days: 7
 
       # ── 9. 把更新的 history.json commit 回 main
+      #     即使 workflow 被 cancel（超时），也要把已采到的进度 commit 回去，下次跑能跳过
       - name: Commit history.json
-        if: success()
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

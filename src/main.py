@@ -59,16 +59,14 @@ BJ_TZ = timezone(timedelta(hours=8))
 
 
 def default_target_dates() -> list:
-    """默认目标日期 = [北京昨天, 北京前天]（从新到旧）
+    """默认目标日期 = [北京昨天]（单日）
 
-    两天合采的原因：chatpaper 对海外 IP 有 ~1-2 天数据延迟，
-    采 today-1 保证有最新数据（海外已同步的），
-    采 today-2 兜底（海外肯定已同步），共同保证不漏采。
+    之前是双日采（昨天+前天），但 9 个关键词 × 2 天 × chatpaper 慢响应
+    会让 workflow 超过 5 小时。现在只采昨天，依赖每天调度滚动覆盖。
     """
     now_bj = datetime.now(BJ_TZ)
     return [
         (now_bj - timedelta(days=1)).date(),  # 昨天
-        (now_bj - timedelta(days=2)).date(),  # 前天
     ]
 
 
@@ -370,6 +368,14 @@ async def run_task(
                 f"录入 {ks.recorded} | 过滤 {ks.filtered} | "
                 f"超时 {ks.timeout} | 去重 {ks.deduped}"
             )
+
+            # 增量刷一次中间报告：即使后续被 cancel 也能在 artifact 里看到当前进度
+            try:
+                report_dir = CONFIG.get('report_dir', 'data/reports')
+                _intermediate_path = write_report(task_log, output_dir=report_dir)
+                logger.debug(f"[中间报告已刷] {_intermediate_path}")
+            except Exception as e:
+                logger.warning(f"刷中间报告失败（继续后续关键词）: {e}")
 
     logger.info("=" * 60)
     logger.info(
