@@ -372,18 +372,17 @@ async def run_task(
 
             # ─────────────────────────────────────────────────
             # arxiv 兜底触发条件：
-            #   1. 任意 target_date > 5 天前（main 已跳过 chatpaper，必须走 arxiv）
-            #   2. chatpaper 0 命中 + (翻 ≥5 页 OR 二分卡死)
+            #   1. 任意 target_date > 5 天前（main 已跳过 chatpaper）
+            #   2. chatpaper 0 命中（无论翻了几页）
             # ─────────────────────────────────────────────────
-            FALLBACK_PAGE_THRESHOLD = 5
             has_far_date = any((now_bj_today - td).days > 5 for td in target_dates)
-            need_fallback = has_far_date or (
-                ks.cards_seen == 0
-                and (
-                    scraper.last_run_pages >= FALLBACK_PAGE_THRESHOLD
-                    or scraper.last_run_aborted_by_stuck
-                )
-            )
+            need_fallback = has_far_date or ks.cards_seen == 0
+
+            # 把 chatpaper 截止于哪张卡片记到 KeywordStats（给报告用）
+            if scraper.last_run_stop_at_meta:
+                m = scraper.last_run_stop_at_meta
+                ks.stop_at_date = m.get('date')
+                ks.stop_at_title = m.get('title_zh') or m.get('title_en', '')
             if need_fallback:
                 ks.arxiv_fallback_triggered = True
                 logger.warning(

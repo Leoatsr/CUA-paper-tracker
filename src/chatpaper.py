@@ -84,6 +84,8 @@ class ChatPaperScraper:
         self.last_run_pages = 0          # 翻了多少页
         self.last_run_target_hits = 0    # 命中目标日期的总卡片数
         self.last_run_aborted_by_stuck = False  # 是否因为二分卡死被中止
+        # 触发"翻到比目标日更早"停止时，那张"截止"卡片的信息
+        self.last_run_stop_at_meta = None  # dict: {date, title_zh, title_en, arxiv_id?}
 
     async def __aenter__(self):
         self._pw = await async_playwright().start()
@@ -185,6 +187,7 @@ class ChatPaperScraper:
         self.last_run_pages = 0
         self.last_run_target_hits = 0
         self.last_run_aborted_by_stuck = False
+        self.last_run_stop_at_meta = None
 
         page = await self._context.new_page()
         try:
@@ -221,6 +224,13 @@ class ChatPaperScraper:
                         logger.info(
                             f"[{keyword}] 第 {page_num} 页遇到日期 {card_date} < 目标 {target_date}，停止翻页"
                         )
+                        # 记下截止于哪张卡片，给报告用
+                        self.last_run_stop_at_meta = {
+                            'date': card_date,
+                            'title_zh': meta.get('title_zh', ''),
+                            'title_en': meta.get('title_en', ''),
+                            'detail_url': meta.get('detail_url', ''),
+                        }
                         should_stop = True
                         break
 

@@ -425,30 +425,39 @@ def _render_html(task_log: TaskLog) -> str:
   </div>
 """)
 
-    # 采集范围：每个关键词在 chatpaper 上遍历到的首末篇
-    range_rows = []
+    # 采集范围：分两部分
+    # - hit_rows: 有命中（first_arxiv_id 存在），主表展示
+    # - empty_rows: 0 命中但有 stop_at 信息（chatpaper 翻到了某天但没匹配目标日），折叠展示
+    hit_rows = []
+    empty_rows = []
     for ks in task_log.keyword_stats:
-        if not ks.first_arxiv_id and not ks.last_arxiv_id:
-            continue
-        range_rows.append(ks)
+        if ks.first_arxiv_id:
+            hit_rows.append(ks)
+        elif ks.stop_at_date or ks.stop_at_title:
+            empty_rows.append(ks)
+        # 既无 first 又无 stop_at（完全空跑）的关键词不显示
 
-    if range_rows:
+    if hit_rows or empty_rows:
         html_parts.append('''
   <!-- 采集范围 -->
   <div class="section" id="range">
     <h2>🧭 本次采集范围（每个关键词首末篇）</h2>
-    <table>
+''')
+
+    if hit_rows:
+        html_parts.append('''    <table>
       <thead>
         <tr>
           <th style="width:140px">关键词</th>
           <th>第一篇</th>
           <th>最后一篇</th>
+          <th>截止于</th>
           <th style="width:80px">本关键词总见</th>
         </tr>
       </thead>
       <tbody>
 ''')
-        for ks in range_rows:
+        for ks in hit_rows:
             first_cell = (
                 f'<span class="arxiv-id">{_html_escape(ks.first_arxiv_id or "")}</span>'
                 f'<div class="title-en" style="margin-top:4px">{_html_escape((ks.first_title or "")[:80])}</div>'
@@ -459,15 +468,51 @@ def _render_html(task_log: TaskLog) -> str:
                 f'<div class="title-en" style="margin-top:4px">{_html_escape((ks.last_title or "")[:80])}</div>'
                 if ks.last_arxiv_id else '<span style="color:#cbd5e1">—</span>'
             )
+            stop_cell = (
+                f'<span style="color:#94a3b8;font-size:12px">{_html_escape(str(ks.stop_at_date) if ks.stop_at_date else "")}</span>'
+                f'<div class="title-en" style="margin-top:4px">{_html_escape((ks.stop_at_title or "")[:80])}</div>'
+                if (ks.stop_at_date or ks.stop_at_title) else '<span style="color:#cbd5e1">—</span>'
+            )
             html_parts.append(f'''
         <tr>
           <td><span class="keyword-tag">{_html_escape(ks.keyword)}</span></td>
           <td>{first_cell}</td>
           <td>{last_cell}</td>
+          <td>{stop_cell}</td>
           <td style="text-align:center">{ks.cards_seen}</td>
         </tr>
 ''')
-        html_parts.append('      </tbody>\n    </table>\n  </div>\n')
+        html_parts.append('      </tbody>\n    </table>\n')
+
+    # 0 命中的关键词折叠展示（仅展示截止于卡片）
+    if empty_rows:
+        html_parts.append(f'''
+    <details style="margin-top:16px">
+      <summary>未命中关键词（{len(empty_rows)} 个）— chatpaper 翻到目标日时没找到论文</summary>
+      <table style="margin-top:12px">
+        <thead>
+          <tr>
+            <th style="width:140px">关键词</th>
+            <th>截止于（chatpaper 上下一篇日期 < 目标日）</th>
+          </tr>
+        </thead>
+        <tbody>
+''')
+        for ks in empty_rows:
+            stop_cell = (
+                f'<span style="color:#94a3b8;font-size:12px">{_html_escape(str(ks.stop_at_date) if ks.stop_at_date else "")}</span>'
+                f'<div class="title-en" style="margin-top:4px">{_html_escape((ks.stop_at_title or "")[:80])}</div>'
+            )
+            html_parts.append(f'''
+          <tr>
+            <td><span class="keyword-tag">{_html_escape(ks.keyword)}</span></td>
+            <td>{stop_cell}</td>
+          </tr>
+''')
+        html_parts.append('        </tbody>\n      </table>\n    </details>\n')
+
+    if hit_rows or empty_rows:
+        html_parts.append('  </div>\n')
 
     # 录入明细
     html_parts.append(f'''

@@ -59,6 +59,10 @@ class KeywordStats(BaseModel):
     first_title: Optional[str] = None
     last_arxiv_id: Optional[str] = None
     last_title: Optional[str] = None
+    # 触发"翻到比目标日更早"停止时，那张"截止"卡片的信息
+    stop_at_date: Optional[date_type] = None
+    stop_at_title: Optional[str] = None
+    stop_at_arxiv_id: Optional[str] = None
     # arxiv 兜底相关
     arxiv_fallback_triggered: bool = False  # 是否触发了 arxiv 兜底
     arxiv_fallback_recorded: int = 0        # 兜底找到并录入飞书的数
