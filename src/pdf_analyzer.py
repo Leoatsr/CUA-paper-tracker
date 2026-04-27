@@ -109,3 +109,52 @@ def extract_project_url(text: str) -> Optional[str]:
         return None
     candidates.sort(key=lambda x: x[0])
     return candidates[0][1]
+
+
+def extract_largest_image(pdf_bytes: bytes, min_dim: int = 200) -> Optional[bytes]:
+    """
+    从 PDF 抽取尺寸最大的一张栅格图（PNG bytes），通常对应论文的"架构图/主图"。
+
+    启发式：
+    - 跳过宽或高 < min_dim 的图（小图标、装饰、公式截图等）
+    - 取面积最大的那张
+    - 返回 PNG 格式的 bytes，方便上传飞书
+    """
+    try:
+        doc = fitz.open(stream=pdf_bytes, filetype='pdf')
+    except Exception as e:
+        logger.warning(f"PDF 打不开（提图失败）: {e}")
+        return None
+
+    try:
+        best = None  # (area, png_bytes)
+        for page_idx in range(len(doc)):
+            page = doc[page_idx]
+            # get_images 返回 (xref, smask, w, h, bpc, colorspace, ...)
+            for img_info in page.get_images(full=True):
+                xref = img_info[0]
+                w = img_info[2]
+                h = img_info[3]
+                if w < min_dim or h < min_dim:
+                    continue
+                area = w * h
+                if best is not None and area <= best[0]:
+                    continue
+                # 把这张图取出来转 PNG
+                try:
+                    pix = fitz.Pixmap(doc, xref)
+                    # 如果是 CMYK 之类，转换到 RGB
+                    if pix.n - pix.alpha >= 4:
+                        pix = fitz.Pixmap(fitz.csRGB, pix)
+                    png_bytes = pix.tobytes('png')
+                    pix = None  # 释放
+                    best = (area, png_bytes)
+                except Exception as e:
+                    logger.debug(f"PDF 第 {page_idx+1} 页图片 xref={xref} 提取失败: {e}")
+                    continue
+
+        if best is None:
+            return None
+        return best[1]
+    finally:
+        doc.close()

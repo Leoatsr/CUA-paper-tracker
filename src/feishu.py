@@ -249,3 +249,39 @@ class FeishuClient:
         except Exception as e:
             logger.error(f"图片处理失败 {image_url}: {e}")
             return None
+
+    async def upload_image_bytes(self, image_bytes: bytes, ext: str = 'png') -> Optional[str]:
+        """直接上传图片 bytes 到飞书云空间。用于 arxiv 兜底从 PDF 抽出来的图。"""
+        try:
+            actual_size = len(image_bytes)
+            if actual_size == 0:
+                return None
+            import io
+            file_obj = io.BytesIO(image_bytes)
+            file_name = f"paper_image.{ext}"
+
+            req = (
+                UploadAllMediaRequest.builder()
+                .request_body(
+                    UploadAllMediaRequestBody.builder()
+                    .file_name(file_name)
+                    .parent_type('bitable_image')
+                    .parent_node(self.app_token)
+                    .size(actual_size)
+                    .file(file_obj)
+                    .build()
+                )
+                .build()
+            )
+            up_resp = self.client.drive.v1.media.upload_all(req)
+            if not up_resp.success():
+                logger.error(
+                    f"图片(bytes)上传失败: code={up_resp.code} msg={up_resp.msg} "
+                    f"size={actual_size} name={file_name}"
+                )
+                return None
+            return up_resp.data.file_token
+        except Exception as e:
+            logger.error(f"图片(bytes)处理失败: {e}")
+            return None
+

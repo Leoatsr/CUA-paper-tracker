@@ -80,6 +80,9 @@ class ChatPaperScraper:
         self._pw = None
         self._browser = None
         self._context = None
+        # 上一次 collect_for_date 的统计（用于决定是否触发 arxiv 兜底）
+        self.last_run_pages = 0          # 翻了多少页
+        self.last_run_target_hits = 0    # 命中目标日期的总卡片数
 
     async def __aenter__(self):
         self._pw = await async_playwright().start()
@@ -177,6 +180,10 @@ class ChatPaperScraper:
                 所以实际上去重要等进详情页拿到 arxiv_id 后才能做。这个
                 回调暂时保留为接口，方便以后如果 chatpaper 卡片里加 ID。
         """
+        # 重置本轮统计（用于 main.py 判断兜底）
+        self.last_run_pages = 0
+        self.last_run_target_hits = 0
+
         page = await self._context.new_page()
         try:
             # 1. 起始页定位：先看 page=1 第一条卡片日期，决定是否需要二分加速
@@ -234,6 +241,8 @@ class ChatPaperScraper:
                 logger.info(
                     f"[{keyword}] 第 {page_num} 页: 本页 {len(card_metas)} 张 / 命中目标日 {len(page_target_metas)} 张"
                 )
+                self.last_run_pages += 1
+                self.last_run_target_hits += len(page_target_metas)
 
                 for meta in page_target_metas:
                     paper = None

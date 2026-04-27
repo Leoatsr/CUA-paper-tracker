@@ -59,6 +59,9 @@ class KeywordStats(BaseModel):
     first_title: Optional[str] = None
     last_arxiv_id: Optional[str] = None
     last_title: Optional[str] = None
+    # arxiv 兜底相关
+    arxiv_fallback_triggered: bool = False  # 是否触发了 arxiv 兜底
+    arxiv_fallback_recorded: int = 0        # 兜底找到并录入飞书的数
 
 
 class TaskLog(BaseModel):

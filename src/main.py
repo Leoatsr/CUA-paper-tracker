@@ -31,8 +31,9 @@ from .chatpaper import ChatPaperScraper
 from .dedup import HistoryStore
 from .feishu import FeishuClient
 from .matchers import PRIMARY_KEYWORDS
-from .models import TaskLog, KeywordStats, PaperRecord
-from .pdf_analyzer import analyze_pdf, download_pdf
+from .models import TaskLog, KeywordStats, PaperRecord, Paper
+from .pdf_analyzer import analyze_pdf, download_pdf, extract_largest_image
+from .arxiv_fallback import search_arxiv
 from .report import write_report
 from .scheduler import create_scheduler
 
@@ -360,6 +361,139 @@ async def run_task(
 
             except Exception as e:
                 logger.exception(f"关键词 '{keyword}' 采集异常: {e}")
+
+            # ─────────────────────────────────────────────────
+            # arxiv 兜底：chatpaper 0 命中 + 翻够 15 页 → 走 arxiv API
+            # ─────────────────────────────────────────────────
+            FALLBACK_PAGE_THRESHOLD = 15
+            need_fallback = (
+                ks.cards_seen == 0
+                and scraper.last_run_pages >= FALLBACK_PAGE_THRESHOLD
+            )
+            if need_fallback:
+                ks.arxiv_fallback_triggered = True
+                logger.warning(
+                    f"[arxiv兜底] 关键词 '{keyword}' chatpaper 翻 {scraper.last_run_pages} 页 0 命中，"
+                    f"启动 arxiv 兜底"
+                )
+                try:
+                    for td in target_dates:
+                        arxiv_papers = await search_arxiv(keyword, td)
+                        for ap in arxiv_papers:
+                            # 跨任务/跨关键词去重
+                            if ap.arxiv_id in processed_set or history.contains(ap.arxiv_id):
+                                logger.debug(f"[arxiv兜底] 跳过（已处理）: {ap.arxiv_id}")
+                                continue
+                            processed_set.add(ap.arxiv_id)
+
+                            # 下载 PDF
+                            pdf_bytes = await download_pdf(ap.pdf_url, timeout=180)
+                            if pdf_bytes is None:
+                                logger.warning(f"[arxiv兜底] PDF 超时跳过: {ap.arxiv_id}")
+                                continue
+
+                            # 分析 PDF
+                            try:
+                                pdf_info = analyze_pdf(pdf_bytes)
+                            except Exception as e:
+                                logger.error(f"[arxiv兜底] PDF 分析失败 {ap.arxiv_id}: {e}")
+                                continue
+
+                            total_hits = pdf_info['web_agent_count'] + pdf_info['gui_agent_count']
+                            if total_hits < 4:
+                                logger.info(
+                                    f"[arxiv兜底] ⊘ 阈值未达: {ap.arxiv_id} | "
+                                    f"web_agent={pdf_info['web_agent_count']} | "
+                                    f"gui_agent={pdf_info['gui_agent_count']}"
+                                )
+                                if not dry_run:
+                                    history.add(ap.arxiv_id)
+                                continue
+
+                            # 提取最大图作为架构图（兜底专用）
+                            image_bytes = None
+                            try:
+                                image_bytes = extract_largest_image(pdf_bytes)
+                            except Exception as e:
+                                logger.warning(f"[arxiv兜底] 图片提取失败 {ap.arxiv_id}: {e}")
+
+                            # 构造一个 Paper 对象用于录入飞书（中文标题/概要留空）
+                            fb_paper = Paper(
+                                arxiv_id=ap.arxiv_id,
+                                arxiv_url=ap.arxiv_url,
+                                chatpaper_url=None,
+                                title_zh="",  # arxiv 没有中文翻译
+                                title_en=ap.title_en,
+                                core_points="",  # arxiv 没有 AI Summary
+                                abstract_zh="",  # arxiv 没有中文 abstract
+                                abstract_en=ap.abstract_en,
+                                authors=ap.authors,
+                                institutions=[],
+                                date=ap.publish_date,
+                                project_url=pdf_info.get('project_url'),
+                                image_url=None,
+                                web_agent_count=pdf_info['web_agent_count'],
+                                gui_agent_count=pdf_info['gui_agent_count'],
+                                matched_keyword=keyword,
+                            )
+
+                            if dry_run:
+                                ks.arxiv_fallback_recorded += 1
+                                ks.recorded += 1
+                                logger.success(
+                                    f"[arxiv兜底][DRY-RUN] 命中 {ap.arxiv_id} | "
+                                    f"web_agent={pdf_info['web_agent_count']} | "
+                                    f"gui_agent={pdf_info['gui_agent_count']}"
+                                )
+                                continue
+
+                            # 真写飞书（图片直接上传 bytes）
+                            try:
+                                if feishu.exists(fb_paper.arxiv_url):
+                                    task_log.feishu_skipped.append(fb_paper.arxiv_id)
+                                    continue
+                                image_token = None
+                                if image_bytes is not None:
+                                    image_token = await feishu.upload_image_bytes(image_bytes)
+                                feishu.insert(fb_paper, image_token=image_token)
+                                history.add(fb_paper.arxiv_id)
+                                task_log.papers_processed.append(fb_paper.arxiv_id)
+                                ks.recorded += 1
+                                ks.arxiv_fallback_recorded += 1
+                                task_log.records.append(PaperRecord(
+                                    arxiv_id=fb_paper.arxiv_id,
+                                    arxiv_url=fb_paper.arxiv_url,
+                                    chatpaper_url=None,
+                                    date=fb_paper.date,
+                                    title_zh="",
+                                    title_en=fb_paper.title_en,
+                                    matched_keyword=keyword,
+                                    web_agent_count=fb_paper.web_agent_count,
+                                    gui_agent_count=fb_paper.gui_agent_count,
+                                    institutions=[],
+                                    status='recorded',
+                                    has_core_points=False,
+                                    has_image=bool(image_token),
+                                    has_project=bool(fb_paper.project_url),
+                                ))
+                                logger.success(
+                                    f"[arxiv兜底] ✓ 录入 {fb_paper.arxiv_id} | "
+                                    f"web_agent={fb_paper.web_agent_count} | "
+                                    f"gui_agent={fb_paper.gui_agent_count}"
+                                )
+                            except Exception as e:
+                                ks.feishu_failed += 1
+                                task_log.feishu_failed.append(fb_paper.arxiv_id)
+                                logger.error(f"[arxiv兜底] 飞书录入失败 {fb_paper.arxiv_id}: {e}")
+
+                    if ks.arxiv_fallback_recorded > 0:
+                        logger.success(
+                            f"[arxiv兜底] 关键词 '{keyword}' 兜底成功录入 {ks.arxiv_fallback_recorded} 篇"
+                        )
+                    else:
+                        logger.info(f"[arxiv兜底] 关键词 '{keyword}' arxiv 也无符合论文")
+                except Exception as e:
+                    logger.exception(f"[arxiv兜底] 关键词 '{keyword}' 兜底流程异常: {e}")
 
             task_log.keyword_counts[keyword] = ks.recorded
             task_log.keyword_stats.append(ks)
