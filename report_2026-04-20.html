@@ -257,7 +257,7 @@
     </h1>
     <div class="subtitle">
       目标采集日期 <strong>2026-04-20</strong>
-      · 执行时间 2026-04-27 14:45:13 (北京时间)
+      · 执行时间 2026-04-27 14:50:16 (北京时间)
     </div>
   </div>
 
@@ -269,10 +269,10 @@
 
   <!-- B. 字段完整性指示 -->
   <div class="completeness-bar">
-    字段完整性（录入的 0 篇中）：
-    概要 <strong>—</strong> (0/0)
-    · 图片 <strong>—</strong> (0/0)
-    · project <strong>—</strong> (0/0)
+    字段完整性（录入的 2 篇中）：
+    概要 <strong>0%</strong> (0/2)
+    · 图片 <strong>100%</strong> (2/2)
+    · project <strong>0%</strong> (0/2)
   </div>
 
   <!-- 统计卡片 -->
@@ -285,7 +285,7 @@
     <div class="stat-card success">
       <div class="accent"></div>
       <div class="label">命中录入</div>
-      <div class="value">0</div>
+      <div class="value">2</div>
     </div>
     <div class="stat-card gray">
       <div class="accent"></div>
@@ -324,8 +324,40 @@
 
   <!-- 录入明细 -->
   <div class="section" id="recorded">
-    <h2>✓ 录入明细 (0 篇)</h2>
-    <div class="empty">今日没有论文命中关键词</div>
+    <h2>✓ 录入明细 (2 篇)</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th style="width:110px">发布日期</th>
+          <th style="width:90px">web_agent</th>
+          <th style="width:90px">gui_agent</th>
+          <th>机构</th>
+          <th style="width:110px">链接</th>
+        </tr>
+      </thead>
+      <tbody>
+
+        <tr>
+          <td><div class="title-zh"></div><div class="title-en">WebUncertainty: Dual-Level Uncertainty Driven Planning and Reasoning For Autonomous Web Agent</div></td>
+          <td style="white-space:nowrap;color:#64748b;font-size:12px">2026-04-20</td>
+          <td style="text-align:center"><span class="count-badge count-web">22</span></td>
+          <td style="text-align:center"><span class="count-badge count-gui">1</span></td>
+          <td class="institutions"></td>
+          <td><a class="link-btn" href="http://arxiv.org/abs/2604.17821v2" target="_blank">ChatPaper →</a></td>
+        </tr>
+
+        <tr>
+          <td><div class="title-zh"></div><div class="title-en">Do LLMs Need to See Everything? A Benchmark and Study of Failures in LLM-driven Smartphone Automation using Screentext vs. Screenshots</div></td>
+          <td style="white-space:nowrap;color:#64748b;font-size:12px">2026-04-20</td>
+          <td style="text-align:center"><span class="count-badge count-web">1</span></td>
+          <td style="text-align:center"><span class="count-badge count-gui">8</span></td>
+          <td class="institutions"></td>
+          <td><a class="link-btn" href="http://arxiv.org/abs/2604.17817v1" target="_blank">ChatPaper →</a></td>
+        </tr>
+      </tbody>
+    </table>
   </div>
 
 </div>
@@ -339,7 +371,7 @@ new Chart(ctx, {
     datasets: [
       {
         label: '✓ 命中录入',
-        data: [0, 0, 0, 0, 0, 0, 0, 0],
+        data: [0, 1, 0, 0, 1, 0, 0, 0],
         backgroundColor: 'rgba(16, 185, 129, 0.85)',
         borderRadius: 6,
         stack: 's'
