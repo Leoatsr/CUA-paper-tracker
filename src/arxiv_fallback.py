@@ -16,7 +16,7 @@ import httpx
 from loguru import logger
 from xml.etree import ElementTree as ET
 
-ARXIV_API = "http://export.arxiv.org/api/query"
+ARXIV_API = "https://export.arxiv.org/api/query"
 NS = {
     'a': 'http://www.w3.org/2005/Atom',
     'arxiv': 'http://arxiv.org/schemas/atom',
@@ -75,7 +75,7 @@ async def search_arxiv(
 
     logger.info(f"[arxiv兜底] 查询关键词 '{keyword}' 日期 {target_date}")
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
             # arxiv API 对 + 是 AND，不能再 url-encode
             url = ARXIV_API + '?' + '&'.join(
                 f"{k}={v}" if k == 'search_query' else f"{k}={v}"
