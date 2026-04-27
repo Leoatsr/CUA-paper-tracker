@@ -65,7 +65,7 @@ class ChatPaperScraper:
     DATE_PATTERN = re.compile(
         r'^\s*(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{4})\s*$'
     )
-    MAX_PAGES = 30  # 防御：超过就停，避免无限翻
+    MAX_PAGES = 100  # 防御：超过就停。100 页足够应对 60+ 天前的历史回填
 
     def __init__(self, headless: bool = True, navigation_timeout_ms: int = 180000, cookies_json: str = None):
         """
@@ -179,77 +179,62 @@ class ChatPaperScraper:
         """
         page = await self._context.new_page()
         try:
-            for page_num in range(1, self.MAX_PAGES + 1):
-                url = self._build_search_url(keyword, page_num)
-                logger.info(f"[{keyword}] 访问第 {page_num} 页: {url}")
+            # 1. 起始页定位：先看 page=1 第一条卡片日期，决定是否需要二分加速
+            start_metas = await self._load_page_metas(page, keyword, 1)
+            if not start_metas:
+                logger.warning(f"[{keyword}] 第 1 页就没卡片，结束")
+                return
 
-                # chatpaper 海外响应慢: 用 'commit' 等策略（只等服务器开始响应）
-                # 失败时重试 1 次，间隔 10s。主要对抗 DNS/TLS 握手慢或 CDN 抖动。
-                page_loaded = False
-                for attempt in (1, 2):
-                    try:
-                        await page.goto(url, wait_until='commit', timeout=self.nav_timeout)
-                        page_loaded = True
+            page1_first_date = next((m['date'] for m in start_metas if m.get('date')), None)
+
+            if page1_first_date is None or page1_first_date <= target_date:
+                # 目标就在 page=1 附近
+                start_page = 1
+                preloaded_metas = start_metas
+            else:
+                gap_days = (page1_first_date - target_date).days
+                if gap_days <= 5:
+                    # 差距不大不值得二分
+                    start_page = 1
+                    preloaded_metas = start_metas
+                else:
+                    logger.info(
+                        f"[{keyword}] 目标日期 {target_date} 距最新 {page1_first_date} 差 {gap_days} 天，启用二分定位"
+                    )
+                    start_page = await self._binary_search_start_page(page, keyword, target_date)
+                    logger.info(f"[{keyword}] 二分定位到第 {start_page} 页")
+                    preloaded_metas = None
+
+            # 2. 从 start_page 开始顺序读，直到遇到 < target_date
+            for page_num in range(start_page, self.MAX_PAGES + 1):
+                if page_num == start_page and preloaded_metas is not None:
+                    card_metas = preloaded_metas
+                    logger.info(f"[{keyword}] 第 {page_num} 页（预加载）")
+                else:
+                    card_metas = await self._load_page_metas(page, keyword, page_num)
+                    if not card_metas:
+                        logger.warning(f"[{keyword}] 第 {page_num} 页无卡片，结束")
                         break
-                    except Exception as e:
-                        if attempt == 1:
-                            logger.warning(
-                                f"[{keyword}] 第 {page_num} 页加载失败，10s 后重试 (attempt 1/2): {type(e).__name__}"
-                            )
-                            await asyncio.sleep(10)
-                        else:
-                            logger.error(
-                                f"[{keyword}] 第 {page_num} 页重试 2 次仍失败: {e}"
-                            )
-                if not page_loaded:
-                    break
 
-                # 给 DOM 初步渲染 + Vue 把卡片挂上去一点时间
-                await page.wait_for_timeout(5000)
-
-                # 等卡片出现
-                try:
-                    await page.wait_for_selector(SELECTORS['search_card'], timeout=15000)
-                except Exception:
-                    logger.warning(f"[{keyword}] 第 {page_num} 页无卡片，结束")
-                    break
-
-                cards = await page.query_selector_all(SELECTORS['search_card'])
-                if not cards:
-                    logger.warning(f"[{keyword}] 第 {page_num} 页 0 个卡片，结束")
-                    break
-
-                # 抽每张卡片的日期和 detail_url
-                card_metas = []
-                for card in cards:
-                    meta = await self._extract_card_meta(card)
-                    if meta:
-                        card_metas.append(meta)
-
-                # 判断是否需要停止
                 should_stop = False
                 page_target_metas = []
                 for meta in card_metas:
                     card_date = meta.get('date')
                     if card_date is None:
-                        # 无日期卡片就跳过该卡片（可能是置顶/广告之类）
                         continue
                     if card_date == target_date:
                         page_target_metas.append(meta)
                     elif card_date < target_date:
-                        # 遇到更早日期，说明本关键词下 target_date 的论文已采完
                         logger.info(
                             f"[{keyword}] 第 {page_num} 页遇到日期 {card_date} < 目标 {target_date}，停止翻页"
                         )
                         should_stop = True
                         break
-                    # card_date > target_date 的卡片略过（理论上不该出现，除非排序偶有异常）
 
                 logger.info(
                     f"[{keyword}] 第 {page_num} 页: 本页 {len(card_metas)} 张 / 命中目标日 {len(page_target_metas)} 张"
                 )
 
-                # 逐一进入详情页采集（失败自动重试 1 次）
                 for meta in page_target_metas:
                     paper = None
                     for attempt in (1, 2):
@@ -272,6 +257,74 @@ class ChatPaperScraper:
                     break
         finally:
             await page.close()
+
+    async def _load_page_metas(self, page, keyword: str, page_num: int) -> list:
+        """加载某一页搜索结果，返回卡片 meta 列表。失败返回 []"""
+        url = self._build_search_url(keyword, page_num)
+        logger.info(f"[{keyword}] 访问第 {page_num} 页: {url}")
+
+        page_loaded = False
+        for attempt in (1, 2):
+            try:
+                await page.goto(url, wait_until='commit', timeout=self.nav_timeout)
+                page_loaded = True
+                break
+            except Exception as e:
+                if attempt == 1:
+                    logger.warning(
+                        f"[{keyword}] 第 {page_num} 页加载失败，10s 后重试: {type(e).__name__}"
+                    )
+                    await asyncio.sleep(10)
+                else:
+                    logger.error(f"[{keyword}] 第 {page_num} 页重试 2 次仍失败: {e}")
+        if not page_loaded:
+            return []
+
+        await page.wait_for_timeout(5000)
+        try:
+            await page.wait_for_selector(SELECTORS['search_card'], timeout=15000)
+        except Exception:
+            return []
+
+        cards = await page.query_selector_all(SELECTORS['search_card'])
+        if not cards:
+            return []
+
+        metas = []
+        for card in cards:
+            meta = await self._extract_card_meta(card)
+            if meta:
+                metas.append(meta)
+        return metas
+
+    async def _binary_search_start_page(self, page, keyword: str, target_date) -> int:
+        """二分查找：找到第一个"页首日期 <= target_date"的页。
+        chatpaper 倒序：靠前页更新（更大），靠后页更早（更小）。
+        """
+        lo, hi = 2, self.MAX_PAGES
+        best = self.MAX_PAGES
+
+        while lo <= hi:
+            mid = (lo + hi) // 2
+            metas = await self._load_page_metas(page, keyword, mid)
+            if not metas:
+                hi = mid - 1
+                continue
+
+            mid_first_date = next((m['date'] for m in metas if m.get('date')), None)
+            if mid_first_date is None:
+                hi = mid - 1
+                continue
+
+            logger.info(f"[{keyword}] 二分探测 page={mid} 首日期={mid_first_date}")
+
+            if mid_first_date > target_date:
+                lo = mid + 1
+            else:
+                best = mid
+                hi = mid - 1
+
+        return best
 
     @staticmethod
     def _build_search_url(keyword: str, page_num: int) -> str:
