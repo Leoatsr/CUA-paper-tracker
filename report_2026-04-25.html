@@ -257,7 +257,7 @@
     </h1>
     <div class="subtitle">
       目标采集日期 <strong>2026-04-25</strong>
-      · 执行时间 2026-04-26 02:04:35 (北京时间)
+      · 执行时间 2026-04-27 19:57:57 (北京时间)
     </div>
   </div>
 
@@ -322,6 +322,60 @@
     </div>
   </div>
 
+  <!-- 采集范围 -->
+  <div class="section" id="range">
+    <h2>🧭 本次采集范围（每个关键词首末篇）</h2>
+
+    <details style="margin-top:16px">
+      <summary>未命中关键词（7 个）— chatpaper 翻到目标日时没找到论文</summary>
+      <table style="margin-top:12px">
+        <thead>
+          <tr>
+            <th style="width:140px">关键词</th>
+            <th>截止于（chatpaper 上下一篇日期 < 目标日）</th>
+          </tr>
+        </thead>
+        <tbody>
+
+          <tr>
+            <td><span class="keyword-tag">GUI Agent</span></td>
+            <td><span style="color:#94a3b8;font-size:12px">2026-04-23</span><div class="title-en" style="margin-top:4px">VLAA-GUI：知道何时停止、恢复和搜索的模块化框架，用于GUI自动化</div></td>
+          </tr>
+
+          <tr>
+            <td><span class="keyword-tag">Web Agent</span></td>
+            <td><span style="color:#94a3b8;font-size:12px">2026-04-23</span><div class="title-en" style="margin-top:4px">凯撒：深度代理网络探索用于创意答案合成</div></td>
+          </tr>
+
+          <tr>
+            <td><span class="keyword-tag">CUA</span></td>
+            <td><span style="color:#94a3b8;font-size:12px">2026-04-14</span><div class="title-en" style="margin-top:4px">看、指点、细化：带视觉反馈的多轮图形用户界面基础方法</div></td>
+          </tr>
+
+          <tr>
+            <td><span class="keyword-tag">computer use</span></td>
+            <td><span style="color:#94a3b8;font-size:12px">2026-04-23</span><div class="title-en" style="margin-top:4px">双饱和拉姆齐图：计算机辅助数学发现的案例研究</div></td>
+          </tr>
+
+          <tr>
+            <td><span class="keyword-tag">mobile agent</span></td>
+            <td><span style="color:#94a3b8;font-size:12px">2026-04-23</span><div class="title-en" style="margin-top:4px">MATRAG：多智能体透明检索增强生成用于可解释推荐系统</div></td>
+          </tr>
+
+          <tr>
+            <td><span class="keyword-tag">Claw agent</span></td>
+            <td><span style="color:#94a3b8;font-size:12px">2026-04-23</span><div class="title-en" style="margin-top:4px">MATRAG：多智能体透明检索增强生成用于可解释推荐系统</div></td>
+          </tr>
+
+          <tr>
+            <td><span class="keyword-tag">UI agent</span></td>
+            <td><span style="color:#94a3b8;font-size:12px">2026-04-23</span><div class="title-en" style="margin-top:4px">MATRAG：多智能体透明检索增强生成用于可解释推荐系统</div></td>
+          </tr>
+        </tbody>
+      </table>
+    </details>
+  </div>
+
   <!-- 录入明细 -->
   <div class="section" id="recorded">
     <h2>✓ 录入明细 (0 篇)</h2>
@@ -335,32 +389,32 @@ const ctx = document.getElementById('kwChart').getContext('2d');
 new Chart(ctx, {
   type: 'bar',
   data: {
-    labels: ["GUI Agent", "Web Agent", "CUA", "computer use", "mobile agent", "GUI grounding", "Claw agent", "ai agent", "UI agent"],
+    labels: ["GUI Agent", "Web Agent", "CUA", "computer use", "mobile agent", "GUI grounding", "Claw agent", "UI agent"],
     datasets: [
       {
         label: '✓ 命中录入',
-        data: [0, 0, 0, 0, 0, 0, 0, 0, 0],
+        data: [0, 0, 0, 0, 0, 0, 0, 0],
         backgroundColor: 'rgba(16, 185, 129, 0.85)',
         borderRadius: 6,
         stack: 's'
       },
       {
         label: '⊘ 未命中过滤',
-        data: [0, 0, 0, 0, 0, 0, 0, 0, 0],
+        data: [0, 0, 0, 0, 0, 0, 0, 0],
         backgroundColor: 'rgba(148, 163, 184, 0.65)',
         borderRadius: 6,
         stack: 's'
       },
       {
         label: '↻ 历史去重',
-        data: [0, 0, 0, 0, 0, 0, 0, 0, 0],
+        data: [0, 0, 0, 0, 0, 0, 0, 0],
         backgroundColor: 'rgba(99, 102, 241, 0.55)',
         borderRadius: 6,
         stack: 's'
       },
       {
         label: '⌛ PDF 超时',
-        data: [0, 0, 0, 0, 0, 0, 0, 0, 0],
+        data: [0, 0, 0, 0, 0, 0, 0, 0],
         backgroundColor: 'rgba(245, 158, 11, 0.85)',
         borderRadius: 6,
         stack: 's'
