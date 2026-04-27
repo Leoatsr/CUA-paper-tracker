@@ -363,9 +363,10 @@ async def run_task(
                 logger.exception(f"关键词 '{keyword}' 采集异常: {e}")
 
             # ─────────────────────────────────────────────────
-            # arxiv 兜底：chatpaper 0 命中 + 翻够 15 页 → 走 arxiv API
+            # arxiv 兜底：chatpaper 0 命中 + 翻够页 → 走 arxiv API
+            # 翻页数包括二分探测，所以二分卡死场景也能触发（卡死时通常已探测 5+ 次）
             # ─────────────────────────────────────────────────
-            FALLBACK_PAGE_THRESHOLD = 15
+            FALLBACK_PAGE_THRESHOLD = 5
             need_fallback = (
                 ks.cards_seen == 0
                 and scraper.last_run_pages >= FALLBACK_PAGE_THRESHOLD

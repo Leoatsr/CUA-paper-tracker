@@ -208,7 +208,12 @@ class ChatPaperScraper:
                     logger.info(
                         f"[{keyword}] 目标日期 {target_date} 距最新 {page1_first_date} 差 {gap_days} 天，启用二分定位"
                     )
-                    start_page = await self._binary_search_start_page(page, keyword, target_date)
+                    bs_result = await self._binary_search_start_page(page, keyword, target_date)
+                    if bs_result is None:
+                        # 二分卡死，chatpaper 海外数据缺这天，直接结束让 main 触发兜底
+                        logger.warning(f"[{keyword}] 二分定位失败，结束 chatpaper 流程让兜底接管")
+                        return
+                    start_page = bs_result
                     logger.info(f"[{keyword}] 二分定位到第 {start_page} 页")
                     preloaded_metas = None
 
@@ -306,16 +311,22 @@ class ChatPaperScraper:
                 metas.append(meta)
         return metas
 
-    async def _binary_search_start_page(self, page, keyword: str, target_date) -> int:
-        """二分查找：找到第一个"页首日期 <= target_date"的页。
+    async def _binary_search_start_page(self, page, keyword: str, target_date) -> Optional[int]:
+        """二分查找：找到第一个 "页首日期 <= target_date" 的页。
         chatpaper 倒序：靠前页更新（更大），靠后页更早（更小）。
+        返回 None 表示数据异常（连续多次同一日期），无法定位。
         """
         lo, hi = 2, self.MAX_PAGES
         best = self.MAX_PAGES
+        # 卡死检测：连续 N 次探测返回相同日期 = chatpaper 海外数据有断层
+        last_dates = []
+        STUCK_THRESHOLD = 3
 
         while lo <= hi:
             mid = (lo + hi) // 2
             metas = await self._load_page_metas(page, keyword, mid)
+            self.last_run_pages += 1  # 二分探测也算翻页
+
             if not metas:
                 hi = mid - 1
                 continue
@@ -326,6 +337,20 @@ class ChatPaperScraper:
                 continue
 
             logger.info(f"[{keyword}] 二分探测 page={mid} 首日期={mid_first_date}")
+
+            last_dates.append(mid_first_date)
+            if len(last_dates) > STUCK_THRESHOLD:
+                last_dates.pop(0)
+            if (
+                len(last_dates) == STUCK_THRESHOLD
+                and len(set(last_dates)) == 1
+                and last_dates[0] > target_date
+            ):
+                logger.warning(
+                    f"[{keyword}] 二分卡死：连续 {STUCK_THRESHOLD} 次探测都是 {last_dates[0]}，"
+                    f"目标 {target_date} 不可达，放弃二分"
+                )
+                return None
 
             if mid_first_date > target_date:
                 lo = mid + 1
