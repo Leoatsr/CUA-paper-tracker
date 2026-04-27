@@ -150,11 +150,19 @@ async def run_task(
         task_log.chatpaper_cookies_count = scraper.cookies_injected
         task_log.chatpaper_logged_in = scraper.cookies_injected > 0
 
+        # 用于判断"远日期跳过 chatpaper"：今天的日期
+        now_bj_today = datetime.now(BJ_TZ).date()
+
         for keyword in keywords_to_run:
             logger.info(f"━━━━━━ 关键词: {keyword} ━━━━━━")
             ks = KeywordStats(keyword=keyword)
             try:
                 for td in target_dates:
+                    days_old = (now_bj_today - td).days
+                    if days_old > 5:
+                        # 远日期：跳过 chatpaper 直接走 arxiv
+                        logger.info(f"  → 采集日期 {td}（距今 {days_old} 天 > 5，跳过 chatpaper，直接 arxiv）")
+                        continue
                     logger.info(f"  → 采集日期 {td}")
                     async for paper in scraper.collect_for_date(keyword, td):
                         ks.cards_seen += 1
@@ -363,13 +371,18 @@ async def run_task(
                 logger.exception(f"关键词 '{keyword}' 采集异常: {e}")
 
             # ─────────────────────────────────────────────────
-            # arxiv 兜底：chatpaper 0 命中 + 翻够页 → 走 arxiv API
-            # 翻页数包括二分探测，所以二分卡死场景也能触发（卡死时通常已探测 5+ 次）
+            # arxiv 兜底触发条件：
+            #   1. 任意 target_date > 5 天前（main 已跳过 chatpaper，必须走 arxiv）
+            #   2. chatpaper 0 命中 + (翻 ≥5 页 OR 二分卡死)
             # ─────────────────────────────────────────────────
             FALLBACK_PAGE_THRESHOLD = 5
-            need_fallback = (
+            has_far_date = any((now_bj_today - td).days > 5 for td in target_dates)
+            need_fallback = has_far_date or (
                 ks.cards_seen == 0
-                and scraper.last_run_pages >= FALLBACK_PAGE_THRESHOLD
+                and (
+                    scraper.last_run_pages >= FALLBACK_PAGE_THRESHOLD
+                    or scraper.last_run_aborted_by_stuck
+                )
             )
             if need_fallback:
                 ks.arxiv_fallback_triggered = True
@@ -564,7 +577,7 @@ def main():
         logger.info(
             f"单次执行模式 (dry_run={args['dry_run']}, "
             f"target_date={args['target_date'] or '默认=北京昨日'}, "
-            f"keywords={args['keywords'] or '全部 6 个'})"
+            f"keywords={args['keywords'] or f'全部 {len(PRIMARY_KEYWORDS)} 个'})"
         )
         asyncio.run(run_task(
             dry_run=args['dry_run'],

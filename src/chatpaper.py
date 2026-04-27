@@ -83,6 +83,7 @@ class ChatPaperScraper:
         # 上一次 collect_for_date 的统计（用于决定是否触发 arxiv 兜底）
         self.last_run_pages = 0          # 翻了多少页
         self.last_run_target_hits = 0    # 命中目标日期的总卡片数
+        self.last_run_aborted_by_stuck = False  # 是否因为二分卡死被中止
 
     async def __aenter__(self):
         self._pw = await async_playwright().start()
@@ -183,39 +184,19 @@ class ChatPaperScraper:
         # 重置本轮统计（用于 main.py 判断兜底）
         self.last_run_pages = 0
         self.last_run_target_hits = 0
+        self.last_run_aborted_by_stuck = False
 
         page = await self._context.new_page()
         try:
-            # 1. 起始页定位：先看 page=1 第一条卡片日期，决定是否需要二分加速
+            # 加载 page=1
             start_metas = await self._load_page_metas(page, keyword, 1)
             if not start_metas:
                 logger.warning(f"[{keyword}] 第 1 页就没卡片，结束")
                 return
 
-            page1_first_date = next((m['date'] for m in start_metas if m.get('date')), None)
-
-            if page1_first_date is None or page1_first_date <= target_date:
-                # 目标就在 page=1 附近
-                start_page = 1
-                preloaded_metas = start_metas
-            else:
-                gap_days = (page1_first_date - target_date).days
-                if gap_days <= 5:
-                    # 差距不大不值得二分
-                    start_page = 1
-                    preloaded_metas = start_metas
-                else:
-                    logger.info(
-                        f"[{keyword}] 目标日期 {target_date} 距最新 {page1_first_date} 差 {gap_days} 天，启用二分定位"
-                    )
-                    bs_result = await self._binary_search_start_page(page, keyword, target_date)
-                    if bs_result is None:
-                        # 二分卡死，chatpaper 海外数据缺这天，直接结束让 main 触发兜底
-                        logger.warning(f"[{keyword}] 二分定位失败，结束 chatpaper 流程让兜底接管")
-                        return
-                    start_page = bs_result
-                    logger.info(f"[{keyword}] 二分定位到第 {start_page} 页")
-                    preloaded_metas = None
+            # 始终从 page=1 顺序翻（远日期由 main.py 直接走 arxiv，不走这里）
+            start_page = 1
+            preloaded_metas = start_metas
 
             # 2. 从 start_page 开始顺序读，直到遇到 < target_date
             for page_num in range(start_page, self.MAX_PAGES + 1):
