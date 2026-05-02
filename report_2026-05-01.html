@@ -257,7 +257,7 @@
     </h1>
     <div class="subtitle">
       目标采集日期 <strong>2026-05-01</strong>
-      · 执行时间 2026-05-02 02:38:40 (北京时间)
+      · 执行时间 2026-05-02 21:11:54 (北京时间)
     </div>
   </div>
 
@@ -280,7 +280,7 @@
     <div class="stat-card primary">
       <div class="accent"></div>
       <div class="label">采集总数</div>
-      <div class="value">2</div>
+      <div class="value">0</div>
     </div>
     <div class="stat-card success">
       <div class="accent"></div>
@@ -305,12 +305,12 @@
     <div class="stat-card gray">
       <div class="accent"></div>
       <div class="label">历史去重</div>
-      <div class="value">1</div>
+      <div class="value">0</div>
     </div>
     <div class="stat-card danger">
       <div class="accent"></div>
       <div class="label">飞书失败</div>
-      <div class="value">1</div>
+      <div class="value">0</div>
     </div>
   </div>
 
@@ -325,30 +325,9 @@
   <!-- 采集范围 -->
   <div class="section" id="range">
     <h2>🧭 本次采集范围（每个关键词首末篇）</h2>
-    <table>
-      <thead>
-        <tr>
-          <th style="width:140px">关键词</th>
-          <th>第一篇</th>
-          <th>最后一篇</th>
-          <th>截止于</th>
-          <th style="width:80px">本关键词总见</th>
-        </tr>
-      </thead>
-      <tbody>
-
-        <tr>
-          <td><span class="keyword-tag">GUI Agent</span></td>
-          <td><span class="arxiv-id">2604.27955</span><div class="title-en" style="margin-top:4px">带有强化学习的图形用户界面代理：迈向数字居民</div></td>
-          <td><span class="arxiv-id">2604.27776</span><div class="title-en" style="margin-top:4px">WindowsWorld：专业跨应用环境中自主图形用户界面代理的过程中心基准测试</div></td>
-          <td><span style="color:#94a3b8;font-size:12px">2026-04-30</span><div class="title-en" style="margin-top:4px">FineState-Bench：用于细粒度GUI状态设置的状态条件基础评估</div></td>
-          <td style="text-align:center">2</td>
-        </tr>
-      </tbody>
-    </table>
 
     <details style="margin-top:16px">
-      <summary>未命中关键词（7 个）— chatpaper 翻到目标日时没找到论文</summary>
+      <summary>未命中关键词（8 个）— chatpaper 翻到目标日时没找到论文</summary>
       <table style="margin-top:12px">
         <thead>
           <tr>
@@ -357,6 +336,11 @@
           </tr>
         </thead>
         <tbody>
+
+          <tr>
+            <td><span class="keyword-tag">GUI Agent</span></td>
+            <td><span style="color:#94a3b8;font-size:12px">2026-04-30</span><div class="title-en" style="margin-top:4px">带有强化学习的图形用户界面代理：迈向数字居民</div></td>
+          </tr>
 
           <tr>
             <td><span class="keyword-tag">Web Agent</span></td>
@@ -403,22 +387,6 @@
     <div class="empty">今日没有论文命中关键词</div>
   </div>
 
-  <!-- 飞书失败 -->
-  <div class="section" style="background:#fef2f2">
-    <h2 style="border-left-color:#ef4444">✕ 飞书写入失败 (1 篇)</h2>
-    <table>
-      <thead><tr><th>arXiv</th><th>标题</th><th>错误信息</th></tr></thead>
-      <tbody>
-
-        <tr>
-          <td class="arxiv-id">2604.27776</td>
-          <td><div class="title-zh">WindowsWorld：专业跨应用环境中自主图形用户界面代理的过程中心基准测试</div></td>
-          <td><div class="error-box">飞书插入失败: code=1254045 msg=FieldNameNotFound</div></td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
 </div>
 
 <script>
@@ -444,7 +412,7 @@ new Chart(ctx, {
       },
       {
         label: '↻ 历史去重',
-        data: [1, 0, 0, 0, 0, 0, 0, 0],
+        data: [0, 0, 0, 0, 0, 0, 0, 0],
         backgroundColor: 'rgba(99, 102, 241, 0.55)',
         borderRadius: 6,
         stack: 's'
