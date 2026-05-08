@@ -3,7 +3,7 @@ name: Daily Paper Tracker
 on:
   schedule:
     # UTC 17:30 = 北京次日 01:30（凌晨冷门时段，GitHub Actions 延迟最小）
-    - cron: '30 17 * * *'
+    - cron: '0 6 * * *'
   workflow_dispatch:
     inputs:
       target_date:
