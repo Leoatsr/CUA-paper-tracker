@@ -1,0 +1,1196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>论文追踪报告 - 2026-06-03</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(180deg, #f6f8fd 0%, #eef1f9 100%);
+    color: #2d3748;
+    min-height: 100vh;
+    padding: 24px;
+  }
+  .container { max-width: 1280px; margin: 0 auto; }
+
+  /* 顶部 Header */
+  .header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 28px 32px;
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(102, 126, 234, 0.25);
+    margin-bottom: 24px;
+  }
+  .header h1 { font-size: 24px; margin-bottom: 6px; font-weight: 700; }
+  .header .subtitle { font-size: 14px; opacity: 0.9; }
+  .header .dry-run-badge {
+    display: inline-block;
+    background: #fbbf24;
+    color: #1f2937;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    margin-left: 8px;
+    font-weight: 600;
+  }
+
+  /* 顶部大卡片 */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .stat-card {
+    background: white;
+    padding: 20px;
+    border-radius: 14px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s;
+  }
+  .stat-card:hover { transform: translateY(-2px); }
+  .stat-card .label {
+    font-size: 13px;
+    color: #64748b;
+    margin-bottom: 8px;
+    font-weight: 500;
+  }
+  .stat-card .value {
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+  .stat-card .accent {
+    position: absolute;
+    top: 0; right: 0;
+    width: 60px; height: 60px;
+    border-radius: 0 14px 0 60px;
+    opacity: 0.12;
+  }
+  .stat-card.primary .value { color: #6366f1; }
+  .stat-card.primary .accent { background: #6366f1; }
+  .stat-card.success .value { color: #10b981; }
+  .stat-card.success .accent { background: #10b981; }
+  .stat-card.warn .value { color: #f59e0b; }
+  .stat-card.warn .accent { background: #f59e0b; }
+  .stat-card.danger .value { color: #ef4444; }
+  .stat-card.danger .accent { background: #ef4444; }
+  .stat-card.gray .value { color: #64748b; }
+  .stat-card.gray .accent { background: #64748b; }
+
+  /* 区块 */
+  .section {
+    background: white;
+    border-radius: 14px;
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  }
+  .section h2 {
+    font-size: 17px;
+    margin-bottom: 16px;
+    color: #1e293b;
+    border-left: 4px solid #6366f1;
+    padding-left: 12px;
+  }
+
+  /* Chart */
+  .chart-wrapper { position: relative; height: 340px; }
+
+  /* 表格 */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    background: #f1f5f9;
+    padding: 10px 12px;
+    text-align: left;
+    color: #475569;
+    font-weight: 600;
+    border-bottom: 2px solid #e2e8f0;
+  }
+  tbody td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: top;
+  }
+  tbody tr:hover { background: #f8fafc; }
+  .arxiv-id { font-family: "SF Mono", Consolas, monospace; color: #6366f1; }
+  .title-zh { font-weight: 500; color: #1e293b; max-width: 300px; }
+  .title-en { font-size: 12px; color: #64748b; margin-top: 2px; max-width: 300px; }
+  .keyword-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    background: #ede9fe;
+    color: #6d28d9;
+    font-weight: 500;
+  }
+  .count-badge {
+    display: inline-block;
+    min-width: 32px;
+    padding: 2px 6px;
+    text-align: center;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .count-web { background: #dbeafe; color: #1d4ed8; }
+  .count-gui { background: #dcfce7; color: #15803d; }
+  .institutions { font-size: 12px; color: #64748b; max-width: 240px; }
+  .link-btn {
+    color: #6366f1;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .link-btn:hover { text-decoration: underline; }
+
+  /* 空状态 */
+  .empty {
+    text-align: center;
+    padding: 32px;
+    color: #94a3b8;
+    font-size: 13px;
+  }
+
+  /* 错误消息 */
+  .error-box {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: "SF Mono", Consolas, monospace;
+    margin-top: 4px;
+  }
+
+  /* 折叠表格 */
+  details { margin-top: 8px; }
+  details summary {
+    cursor: pointer;
+    padding: 10px 14px;
+    background: #f8fafc;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #475569;
+    list-style: none;
+    user-select: none;
+  }
+  details summary::before { content: "▶ "; font-size: 10px; color: #94a3b8; }
+  details[open] summary::before { content: "▼ "; }
+  details[open] summary { background: #ede9fe; color: #6d28d9; }
+
+  /* sticky 顶部导航 */
+  .nav-bar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(255,255,255,0.96);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid #e5e7eb;
+    padding: 10px 16px;
+    margin: -20px -20px 24px -20px;
+    display: flex;
+    gap: 12px;
+    font-size: 13px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .nav-bar a {
+    color: #475569;
+    text-decoration: none;
+    padding: 4px 10px;
+    border-radius: 6px;
+    transition: background 0.15s;
+  }
+  .nav-bar a:hover { background: #ede9fe; color: #6d28d9; }
+
+  /* 登录徽章 */
+  .login-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .login-badge.ok { background: #d1fae5; color: #065f46; }
+  .login-badge.fail { background: #fee2e2; color: #991b1b; }
+
+  /* 字段完整性指示 */
+  .completeness-bar {
+    display: flex;
+    gap: 20px;
+    padding: 8px 14px;
+    background: #f8fafc;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #475569;
+    flex-wrap: wrap;
+  }
+  .completeness-bar strong { color: #0f172a; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- sticky 导航栏 -->
+  <nav class="nav-bar">
+    <a href="#top">🏠 顶部</a>
+    <a href="#range">🧭 采集范围</a>
+    <a href="#recorded">✓ 录入明细</a>
+    <a href="#filtered">⊘ 未命中</a>
+    <a href="#timeout">⌛ 超时</a>
+  </nav>
+
+  <!-- Header -->
+  <div class="header" id="top">
+    <h1>📑 论文追踪报告
+      
+    </h1>
+    <div class="subtitle">
+      目标采集日期 <strong>2026-06-03</strong>
+      · 执行时间 2026-06-04 17:54:16 (北京时间)
+    </div>
+  </div>
+
+  <!-- A. ChatPaper 登录状态徽章 -->
+  <div style="display:flex; gap:12px; align-items:center; margin-bottom:16px; flex-wrap:wrap">
+    <span class="login-badge ok">🟢 ChatPaper 已登录 (cookies 1 条)</span>
+    
+  </div>
+
+  <!-- B. 字段完整性指示 -->
+  <div class="completeness-bar">
+    字段完整性（录入的 1 篇中）：
+    概要 <strong>0%</strong> (0/1)
+    · 图片 <strong>0%</strong> (0/1)
+    · project <strong>0%</strong> (0/1)
+  </div>
+
+  <!-- 统计卡片 -->
+  <div class="stat-grid">
+    <div class="stat-card primary">
+      <div class="accent"></div>
+      <div class="label">采集总数</div>
+      <div class="value">392</div>
+    </div>
+    <div class="stat-card success">
+      <div class="accent"></div>
+      <div class="label">命中录入</div>
+      <div class="value">1</div>
+    </div>
+    <div class="stat-card gray">
+      <div class="accent"></div>
+      <div class="label">未命中过滤</div>
+      <div class="value">132</div>
+    </div>
+    <div class="stat-card warn">
+      <div class="accent"></div>
+      <div class="label">PDF 超时</div>
+      <div class="value">0</div>
+    </div>
+    <div class="stat-card gray">
+      <div class="accent"></div>
+      <div class="label">飞书已有</div>
+      <div class="value">0</div>
+    </div>
+    <div class="stat-card gray">
+      <div class="accent"></div>
+      <div class="label">历史去重</div>
+      <div class="value">257</div>
+    </div>
+    <div class="stat-card danger">
+      <div class="accent"></div>
+      <div class="label">飞书失败</div>
+      <div class="value">2</div>
+    </div>
+  </div>
+
+  <!-- Chart -->
+  <div class="section">
+    <h2>关键词分布</h2>
+    <div class="chart-wrapper">
+      <canvas id="kwChart"></canvas>
+    </div>
+  </div>
+
+  <!-- 采集范围 -->
+  <div class="section" id="range">
+    <h2>🧭 本次采集范围（每个关键词首末篇）</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:140px">关键词</th>
+          <th>第一篇</th>
+          <th>最后一篇</th>
+          <th>截止于</th>
+          <th style="width:80px">本关键词总见</th>
+        </tr>
+      </thead>
+      <tbody>
+
+        <tr>
+          <td><span class="keyword-tag">GUI Agent</span></td>
+          <td><span class="arxiv-id">2606.04701</span><div class="title-en" style="margin-top:4px">在短视频平台上对生活屏幕原生图形用户界面代理进行基准测试</div></td>
+          <td><span class="arxiv-id">2606.04296</span><div class="title-en" style="margin-top:4px">饱和陷阱与干预时机的主观性：为何基于情感的触发器和大型语言模型评判者未能准确把握自主智能体的干预时机</div></td>
+          <td><span style="color:#94a3b8;font-size:12px">2026-06-02</span><div class="title-en" style="margin-top:4px">Demo2教程：从人类经验到多模态软件教程</div></td>
+          <td style="text-align:center">62</td>
+        </tr>
+
+        <tr>
+          <td><span class="keyword-tag">Web Agent</span></td>
+          <td><span class="arxiv-id">2606.04391</span><div class="title-en" style="margin-top:4px">通过状态基础动态检索进行网络代理的在线技能学习</div></td>
+          <td><span class="arxiv-id">2606.04296</span><div class="title-en" style="margin-top:4px">饱和陷阱与干预时机的主观性：为何基于情感的触发器和大型语言模型评判者未能准确把握自主智能体的干预时机</div></td>
+          <td><span style="color:#94a3b8;font-size:12px">2026-06-02</span><div class="title-en" style="margin-top:4px">WebRISE：基于需求的状态评估用于多语言模型生成的网络工件</div></td>
+          <td style="text-align:center">72</td>
+        </tr>
+
+        <tr>
+          <td><span class="keyword-tag">computer use</span></td>
+          <td><span class="arxiv-id">2606.05149</span><div class="title-en" style="margin-top:4px">一个开源的两阶段计算机视觉管道，用于基于视觉变换器的细粒度车辆分类</div></td>
+          <td><span class="arxiv-id">2606.04402</span><div class="title-en" style="margin-top:4px">并非所有错误都是相同的：基于后果的推理计算分配</div></td>
+          <td><span style="color:#94a3b8;font-size:12px">2026-06-02</span><div class="title-en" style="margin-top:4px">MedCUA-Bench：一个仅基于截图的临床计算机使用代理基准测试</div></td>
+          <td style="text-align:center">61</td>
+        </tr>
+
+        <tr>
+          <td><span class="keyword-tag">mobile agent</span></td>
+          <td><span class="arxiv-id">2606.04627</span><div class="title-en" style="margin-top:4px">MIRAGE：具有隐式推理和生成世界模型的移动代理</div></td>
+          <td><span class="arxiv-id">2606.04296</span><div class="title-en" style="margin-top:4px">饱和陷阱与干预时机的主观性：为何基于情感的触发器和大型语言模型评判者未能准确把握自主智能体的干预时机</div></td>
+          <td><span style="color:#94a3b8;font-size:12px">2026-06-02</span><div class="title-en" style="margin-top:4px">感知优先于推理：高效可靠的主动移动代理的预推理感知框架</div></td>
+          <td style="text-align:center">61</td>
+        </tr>
+
+        <tr>
+          <td><span class="keyword-tag">GUI grounding</span></td>
+          <td><span class="arxiv-id">2606.04701</span><div class="title-en" style="margin-top:4px">在短视频平台上对生活屏幕原生图形用户界面代理进行基准测试</div></td>
+          <td><span class="arxiv-id">2606.04990</span><div class="title-en" style="margin-top:4px">从代理痕迹到信任：大型语言模型代理中的证据追踪与执行来源</div></td>
+          <td><span style="color:#94a3b8;font-size:12px">2026-06-02</span><div class="title-en" style="margin-top:4px">自我中心自然语言查询定位的手部轨迹融合</div></td>
+          <td style="text-align:center">14</td>
+        </tr>
+
+        <tr>
+          <td><span class="keyword-tag">Claw agent</span></td>
+          <td><span class="arxiv-id">2606.04455</span><div class="title-en" style="margin-top:4px">元代理挑战：当前代理是否具备自主代理开发的能力？</div></td>
+          <td><span class="arxiv-id">2606.04296</span><div class="title-en" style="margin-top:4px">饱和陷阱与干预时机的主观性：为何基于情感的触发器和大型语言模型评判者未能准确把握自主智能体的干预时机</div></td>
+          <td><span style="color:#94a3b8;font-size:12px">2026-06-02</span><div class="title-en" style="margin-top:4px">RealClawBench：来自真实开发者代理会话的实时OpenClaw基准测试</div></td>
+          <td style="text-align:center">61</td>
+        </tr>
+
+        <tr>
+          <td><span class="keyword-tag">UI agent</span></td>
+          <td><span class="arxiv-id">2606.04455</span><div class="title-en" style="margin-top:4px">元代理挑战：当前代理是否具备自主代理开发的能力？</div></td>
+          <td><span class="arxiv-id">2606.04296</span><div class="title-en" style="margin-top:4px">饱和陷阱与干预时机的主观性：为何基于情感的触发器和大型语言模型评判者未能准确把握自主智能体的干预时机</div></td>
+          <td><span style="color:#94a3b8;font-size:12px">2026-06-02</span><div class="title-en" style="margin-top:4px">OpenAgenet/OAN：可信代理互联的开放基础设施</div></td>
+          <td style="text-align:center">61</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <details style="margin-top:16px">
+      <summary>未命中关键词（1 个）— chatpaper 翻到目标日时没找到论文</summary>
+      <table style="margin-top:12px">
+        <thead>
+          <tr>
+            <th style="width:140px">关键词</th>
+            <th>截止于（chatpaper 上下一篇日期 < 目标日）</th>
+          </tr>
+        </thead>
+        <tbody>
+
+          <tr>
+            <td><span class="keyword-tag">CUA</span></td>
+            <td><span style="color:#94a3b8;font-size:12px">2026-06-01</span><div class="title-en" style="margin-top:4px">OpenWebRL：揭示视觉网络代理的在线多轮强化学习</div></td>
+          </tr>
+        </tbody>
+      </table>
+    </details>
+  </div>
+
+  <!-- 录入明细 -->
+  <div class="section" id="recorded">
+    <h2>✓ 录入明细 (1 篇)</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th style="width:110px">发布日期</th>
+          <th style="width:90px">web_agent</th>
+          <th style="width:90px">gui_agent</th>
+          <th>机构</th>
+          <th style="width:110px">链接</th>
+        </tr>
+      </thead>
+      <tbody>
+
+        <tr>
+          <td><div class="title-zh">MIRAGE：具有隐式推理和生成世界模型的移动代理</div><div class="title-en">MIRAGE: Mobile Agents with Implicit Reasoning and Generative World Models</div></td>
+          <td style="white-space:nowrap;color:#64748b;font-size:12px">2026-06-03</td>
+          <td style="text-align:center"><span class="count-badge count-web">0</span></td>
+          <td style="text-align:center"><span class="count-badge count-gui">15</span></td>
+          <td class="institutions">Beihang University; Northwestern Polytechnical University; Chinese Academy of Sciences; National University of Singapore; Peking University; Independent Researcher</td>
+          <td><a class="link-btn" href="https://chatpaper.com/zh-CN/paper/295109?from=subpath-search" target="_blank">ChatPaper →</a></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 过滤明细（折叠）-->
+  <div class="section" id="filtered">
+    <h2>⊘ 未命中过滤 (132 篇)</h2>
+    <details>
+      <summary>展开查看全部 132 篇未命中关键词的论文</summary>
+      <table style="margin-top:12px">
+        <thead><tr><th style="width:140px">arXiv</th><th>Title</th></tr></thead>
+        <tbody>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04455" target="_blank">2606.04455</a></td>
+            <td><div class="title-zh">The Meta-Agent Challenge: Are Current Agents Capable of Autonomous Agent Development?</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04104" target="_blank">2606.04104</a></td>
+            <td><div class="title-zh">Proof-Carrying Agent Actions: Model-Agnostic Runtime Governance for Heterogeneous Agent Systems</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.05158" target="_blank">2606.05158</a></td>
+            <td><div class="title-zh">Streaming Communication in Multi-Agent Reasoning</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04051" target="_blank">2606.04051</a></td>
+            <td><div class="title-zh">RUBAS: Rubric-Based Reinforcement Learning for Agent Safety</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04602" target="_blank">2606.04602</a></td>
+            <td><div class="title-zh">Parthenon Law: A Self-Evolving Legal-Agent Framework</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04193" target="_blank">2606.04193</a></td>
+            <td><div class="title-zh">Notarized Agents: Receiver-Attested Confidential Receipts for AI Agent Actions</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04465" target="_blank">2606.04465</a></td>
+            <td><div class="title-zh">SePO: Self-Evolving Prompt Agent for System Prompt Optimization</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.05002" target="_blank">2606.05002</a></td>
+            <td><div class="title-zh">GARL: Game-Theoretic Reinforcement Learning for Multi-Agent Strategic Prioritisation</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04781" target="_blank">2606.04781</a></td>
+            <td><div class="title-zh">AIP: A Graph Representation for Learning and Governing Agent Skills</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.05021" target="_blank">2606.05021</a></td>
+            <td><div class="title-zh">Enhancing the MADDPG Algorithm for Multi-Agent Learning via Action Inference and Importance Sampling</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04874" target="_blank">2606.04874</a></td>
+            <td><div class="title-zh">Agent Planning Benchmark: A Diagnostic Framework for Planning Capabilities in LLM Agents</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04779" target="_blank">2606.04779</a></td>
+            <td><div class="title-zh">Tree-Based Formalization of Multi-Agent Complementarity in Human-AI Interactions</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.05037" target="_blank">2606.05037</a></td>
+            <td><div class="title-zh">Self-Reflective APIs: Structure Beats Verbosity for AI Agent Recovery</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04691" target="_blank">2606.04691</a></td>
+            <td><div class="title-zh">SMADE-IE: Sparse Multi-Agent Framework with Evidence-Driven Debate for Zero-Shot Information Extraction</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04494" target="_blank">2606.04494</a></td>
+            <td><div class="title-zh">Beyond Prompt-Based Planning: MCP-Native Graph Planning-based Biomedical Agent System</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04444" target="_blank">2606.04444</a></td>
+            <td><div class="title-zh">Scaling Datasets for Multi-Sensor, Multi-Agent, and Multi-Domain Learning in Autonomous Systems</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04750" target="_blank">2606.04750</a></td>
+            <td><div class="title-zh">Fog of Love: Engineering Virtuous Agent Behavior with Affinity-based Reinforcement Learning in a Game Environment</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04126" target="_blank">2606.04126</a></td>
+            <td><div class="title-zh">HighTide: An Agent-Curated Open-Source VLSI Benchmark Suite</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04202" target="_blank">2606.04202</a></td>
+            <td><div class="title-zh">SMAC-Talk: A Natural Language Extension of the StarCraft Multi-Agent Challenge for Large Language Models</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04990" target="_blank">2606.04990</a></td>
+            <td><div class="title-zh">From Agent Traces to Trust: Evidence Tracing and Execution Provenance in LLM Agents</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04545" target="_blank">2606.04545</a></td>
+            <td><div class="title-zh">Impostor: An Agent-Curated Benchmark for Realistic AIGC Manipulation Localization</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04492" target="_blank">2606.04492</a></td>
+            <td><div class="title-zh">Episodic Memory Temporal Consistency for Cooperative Multi-Agent Reinforcement Learning</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.05130" target="_blank">2606.05130</a></td>
+            <td><div class="title-zh">Towards Efficient and Evidence-grounded Mobility Prediction with LLM-Driven Agent</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04562" target="_blank">2606.04562</a></td>
+            <td><div class="title-zh">Neetyabhas: A Framework for Uncertainty-Aware Public Policy Optimization in Rational Agent-Based Models</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04223" target="_blank">2606.04223</a></td>
+            <td><div class="title-zh">Consensus is Strategically Insufficient: Reasoning-Trace Disagreement as a Knowledge-Representation Signal</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04484" target="_blank">2606.04484</a></td>
+            <td><div class="title-zh">AgentJet: A Flexible Swarm Training Framework for Agentic Reinforcement Learning</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04903" target="_blank">2606.04903</a></td>
+            <td><div class="title-zh">Provably Auditable and Safe LLM Agents from Human-Authored Ontologies</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04197" target="_blank">2606.04197</a></td>
+            <td><div class="title-zh">Exploring the Topology and Memory of Consensus: How LLM Agents Agree, Fragment, or Settle When Forming Conventions</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04329" target="_blank">2606.04329</a></td>
+            <td><div class="title-zh">From Untrusted Input to Trusted Memory: A Systematic Study of Memory Poisoning Attacks in LLM Agents</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.05112" target="_blank">2606.05112</a></td>
+            <td><div class="title-zh">Evaluating Large Language Models in Dynamic Clinical Decision-Making with Standardized Patient Cases</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04883" target="_blank">2606.04883</a></td>
+            <td><div class="title-zh">Optimizing the Cost-Quality Tradeoff of Agentic Theorem Provers in Lean</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04261" target="_blank">2606.04261</a></td>
+            <td><div class="title-zh">Can Generalist Agents Automate Data Curation?</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04815" target="_blank">2606.04815</a></td>
+            <td><div class="title-zh">Learning While Acting: A Skill-Enhanced Test-Time Co-Evolution Framework for Online Lifelong Learning Agents</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04037" target="_blank">2606.04037</a></td>
+            <td><div class="title-zh">Toward Pre-Deployment Assurance for Enterprise AI Agents: Ontology-Grounded Simulation and Trust Certification</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04397" target="_blank">2606.04397</a></td>
+            <td><div class="title-zh">Context-as-a-Service: Surfacing Cross-File Dependency Chains for LLM-Generated Developer Documentation</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04967" target="_blank">2606.04967</a></td>
+            <td><div class="title-zh">From Prompt to Process: a Process Taxonomy and Comparative Assessment of Frameworks Supporting AI Software Development Agents</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04421" target="_blank">2606.04421</a></td>
+            <td><div class="title-zh">Trivium: Temporal Regret as a First-Class Objective for Causal-Memory Controllers</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04460" target="_blank">2606.04460</a></td>
+            <td><div class="title-zh">CyberGym-E2E: Scalable Real-World Benchmark for AI Agents’ End-to-End Cybersecurity Capabilities</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04029" target="_blank">2606.04029</a></td>
+            <td><div class="title-zh">Position: Deployed Reinforcement Learning should be Continual</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04660" target="_blank">2606.04660</a></td>
+            <td><div class="title-zh">LifeSide: Benchmarking Agents as Lifelong Digital Companions</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2509.10247" target="_blank">2509.10247</a></td>
+            <td><div class="title-zh">DiffAero: A GPU-Accelerated Differentiable Simulation Framework for Efficient Quadrotor Policy Learning</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04755" target="_blank">2606.04755</a></td>
+            <td><div class="title-zh">Archi: Agentic Operations at the CMS Experiment</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04599" target="_blank">2606.04599</a></td>
+            <td><div class="title-zh">Plan First, Judge Later, Run Better: A DMAIC-Inspired Agentic System for Industrial Anomaly Detection</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04780" target="_blank">2606.04780</a></td>
+            <td><div class="title-zh">PersonaTree: Structured Lifecycle Memory for Person Understanding in LLM Agents</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04315" target="_blank">2606.04315</a></td>
+            <td><div class="title-zh">Exploring Cross-Scenario Generality of Agentic Memory Systems: Diagnostics and a Strong Baseline</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.05031" target="_blank">2606.05031</a></td>
+            <td><div class="title-zh">MetaPoint: Unlocking Precise Spatial Control in Agentic Visual Generation</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04923" target="_blank">2606.04923</a></td>
+            <td><div class="title-zh">Reproducing, Analyzing, and Detecting Reward Hacking in Rubric-Based Reinforcement Learning</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04971" target="_blank">2606.04971</a></td>
+            <td><div class="title-zh">Be Fair! Can Machine Learning Engineering Agents Adhere to Fairness Constraints?</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04155" target="_blank">2606.04155</a></td>
+            <td><div class="title-zh">SocialCoach: Personalized Social Skill Learning with RL-based Agentic Tutoring and Practice</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04743" target="_blank">2606.04743</a></td>
+            <td><div class="title-zh">TIDE: Proactive Multi-Problem Discovery via Template-Guided Iteration</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.05080" target="_blank">2606.05080</a></td>
+            <td><div class="title-zh">AutoLab: Can Frontier Models Solve Long-Horizon Auto Research and Engineering Tasks?</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04536" target="_blank">2606.04536</a></td>
+            <td><div class="title-zh">Scaling Self-Evolving Agents via Parametric Memory</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04425" target="_blank">2606.04425</a></td>
+            <td><div class="title-zh">What If Prompt Injection Never Left? Exploring Cross-Session Stored Prompt Injection in Agentic Systems</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04812" target="_blank">2606.04812</a></td>
+            <td><div class="title-zh">Scenario Generation for Risk-Aware Reinforcement Learning with Probably Approximately Safe Guarantees</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04321" target="_blank">2606.04321</a></td>
+            <td><div class="title-zh">The Digital Apprentice: A Framework for Human-Directed Agentic AI Development</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04574" target="_blank">2606.04574</a></td>
+            <td><div class="title-zh">Dynamic Multi-Pair Trading Strategy in Cryptocurrency Markets with Deep Reinforcement Learning</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04513" target="_blank">2606.04513</a></td>
+            <td><div class="title-zh">MapAgent: An Industrial-Grade Agentic Framework for City-scale Lane-level Map Generation</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04399" target="_blank">2606.04399</a></td>
+            <td><div class="title-zh">DPDL: Towards Differential Privacy Preservation in Decentralized Stochastic Learning on Non-IID Data</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04628" target="_blank">2606.04628</a></td>
+            <td><div class="title-zh">RAMPART: Registry-based Agentic Memory with Priority-Aware Runtime Transformation</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04296" target="_blank">2606.04296</a></td>
+            <td><div class="title-zh">The Saturation Trap and the Subjectivity of Intervention Timing: Why Affect-Based Triggers and LLM Judges Fail to Time Interventions on Autonomous Agents</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.05040" target="_blank">2606.05040</a></td>
+            <td><div class="title-zh">SearchLog: A Web Browser Extension for Capturing Search Logs in Laboratory Studies</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04952" target="_blank">2606.04952</a></td>
+            <td><div class="title-zh">Clinical Assistant for Remote Engagement Link (CARE-link): A Web-Based Electronic Health Records Software for Managing Diabetes</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04189" target="_blank">2606.04189</a></td>
+            <td><div class="title-zh">ACAT: A Collaborative Platform for Efficient Aspect-Based Sentiment Dataset Annotation</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04061" target="_blank">2606.04061</a></td>
+            <td><div class="title-zh">Intra-Modal Neighbors Never Lie: Rectifying Inter-Modal Noisy Correspondence via Graph-Based Intra-Modal Reasoning</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04098" target="_blank">2606.04098</a></td>
+            <td><div class="title-zh">When Seeing Is Not Believing – A Benchmark for Search-Grounded Video Misinformation Detection</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04775" target="_blank">2606.04775</a></td>
+            <td><div class="title-zh">Activation Steering of Video Generation Models via Reduced-Order Linear Optimal Control</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04240" target="_blank">2606.04240</a></td>
+            <td><div class="title-zh">Overview of the EReL@MIR 2025 Multimodal Document Retrieval Challenge (Track 1)</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04072" target="_blank">2606.04072</a></td>
+            <td><div class="title-zh">CADET: A Modular Platform for Evaluating Distributed Cooperative Autonomy in Connected Autonomous Vehicles</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04362" target="_blank">2606.04362</a></td>
+            <td><div class="title-zh">Disentangling Answer Engine Optimization from Platform Growth: A Log-Based Natural Experiment on ChatGPT Referral Traffic</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04194" target="_blank">2606.04194</a></td>
+            <td><div class="title-zh">Training-Free Lexical-Dense Fusion for Conversational-Memory Retrieval</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.05149" target="_blank">2606.05149</a></td>
+            <td><div class="title-zh">An Open-Source Two-Stage Computer Vision Pipeline for Fine-Grained Vehicle Classification using Vision Transformers</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04109" target="_blank">2606.04109</a></td>
+            <td><div class="title-zh">Discourse-Role Labels as Presentation-Time Variables for Context Use in Language Models</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04282" target="_blank">2606.04282</a></td>
+            <td><div class="title-zh">FindIt: A Format-Informed Visual Detection Benchmark for Generalist Multimodal LLMs</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04385" target="_blank">2606.04385</a></td>
+            <td><div class="title-zh">Geometry-Preserving Unsupervised Alignment for Heterogeneous Foundation Models</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04891" target="_blank">2606.04891</a></td>
+            <td><div class="title-zh">Hierarchical Space Partition for Surface Reconstruction</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.05058" target="_blank">2606.05058</a></td>
+            <td><div class="title-zh">UniCAD: A Unified Benchmark and Universal Model for Multi-Modal Multi-Task CAD</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04788" target="_blank">2606.04788</a></td>
+            <td><div class="title-zh">Z-FLoc: Zero-Shot Floorplan Localization via Geometric Primitives</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04040" target="_blank">2606.04040</a></td>
+            <td><div class="title-zh">Channel-Oriented Design for EEG-to-Music Reconstruction</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04409" target="_blank">2606.04409</a></td>
+            <td><div class="title-zh">An Empirical Study of Data Scale, Model Complexity, and Input Modalities in Visual Generalization</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04871" target="_blank">2606.04871</a></td>
+            <td><div class="title-zh">Recent Advances and Trends in Learning-based 3D Representations</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2006.04013" target="_blank">2006.04013</a></td>
+            <td><div class="title-zh">AI from concrete to abstract: demystifying artificial intelligence to the general public</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04273" target="_blank">2606.04273</a></td>
+            <td><div class="title-zh">Characterizing initial human-AI proof formalization workflows</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.05085" target="_blank">2606.05085</a></td>
+            <td><div class="title-zh">Automatic Generation of Titles for Research Papers Using Language Models</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04453" target="_blank">2606.04453</a></td>
+            <td><div class="title-zh">Radiomic Feature Selection Using Gradient Loss of Deep Neural Network for Lung Cancer Stage Detection</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04419" target="_blank">2606.04419</a></td>
+            <td><div class="title-zh">L-TGVN: Leveraging Longitudinal Priors for Personalized Rapid MRI</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04846" target="_blank">2606.04846</a></td>
+            <td><div class="title-zh">Large Language Models in K-12 Education: Alignment with State Curriculum Standards and Student Personas</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.05101" target="_blank">2606.05101</a></td>
+            <td><div class="title-zh">FoeGlass: Simple In-Context Learning Is Enough for Red Teaming Audio Deepfake Detectors</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04127" target="_blank">2606.04127</a></td>
+            <td><div class="title-zh">When Retrieval Doesn’t Help: A Large-Scale Study of Biomedical RAG</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04514" target="_blank">2606.04514</a></td>
+            <td><div class="title-zh">SAILRec: Steering LLM Attention to Dual-Side Semantically Aligned Collaborative Embeddings for Recommendation</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.05124" target="_blank">2606.05124</a></td>
+            <td><div class="title-zh">Geometry Gaussians: Decoupling Appearance and Geometry in Gaussian Splatting</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04906" target="_blank">2606.04906</a></td>
+            <td><div class="title-zh">‘Your AI Text is not Mine’: Redefining and Evaluating AI-generated Text Detection under Realistic Assumptions</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04326" target="_blank">2606.04326</a></td>
+            <td><div class="title-zh">Measuring What Matters: Synthetic Benchmarks for Concept Bottleneck Models</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04262" target="_blank">2606.04262</a></td>
+            <td><div class="title-zh">Can I Take Another Dose? Evaluating LLM Decision-Making Under Temporal Uncertainty in OTC Dosing QA</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04889" target="_blank">2606.04889</a></td>
+            <td><div class="title-zh">GRAIL: Gradient-Reweighted Advantages for Reinforcement Learning with Verifiable Rewards</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04924" target="_blank">2606.04924</a></td>
+            <td><div class="title-zh">Can Crowdsourcing Survive the LLM Era? A Community Survey on Human Data Collection</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.05045" target="_blank">2606.05045</a></td>
+            <td><div class="title-zh">Learning Control-Affine Reduced-Order Models via Autoencoders</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04314" target="_blank">2606.04314</a></td>
+            <td><div class="title-zh">Testing Neural Networks via Bayesian-Guided Exploration of Decision Landscapes</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04678" target="_blank">2606.04678</a></td>
+            <td><div class="title-zh">Test-Time Compute Scaling for ASR with Depth-Conditioned Looped Transformers</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04319" target="_blank">2606.04319</a></td>
+            <td><div class="title-zh">PureLight: Learning Complex Luminaires with Light Tracing</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04801" target="_blank">2606.04801</a></td>
+            <td><div class="title-zh">Fast Cubical Persistent Homology on 2D and 3D Images via Union-Find, Pruning, and Lookup Tables</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04272" target="_blank">2606.04272</a></td>
+            <td><div class="title-zh">RL Excursions during Pre-Training: Re-examining Policy Optimization for LLM training</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04505" target="_blank">2606.04505</a></td>
+            <td><div class="title-zh">Simulate, Reason, Decide: Scientific Reasoning with LLMs for Simulation-Driven Decision Making</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04199" target="_blank">2606.04199</a></td>
+            <td><div class="title-zh">Cross-Prompt Generalization in Detecting AI-Generated Fake News Using Interpretable Linguistic Features</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04167" target="_blank">2606.04167</a></td>
+            <td><div class="title-zh">Smart Transportation Without Neurons – Fair Metro Network Expansion with Tabular Reinforcement Learning</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04703" target="_blank">2606.04703</a></td>
+            <td><div class="title-zh">Rethinking Continual Experience Internalization for Self-Evolving LLM Agents</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04432" target="_blank">2606.04432</a></td>
+            <td><div class="title-zh">DSA: Dynamic Step Allocation for Fast Autoregressive Video Generation</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04866" target="_blank">2606.04866</a></td>
+            <td><div class="title-zh">Provably Reduced Sample Cost in Prior-Guided Hyperparameter Optimization</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04045" target="_blank">2606.04045</a></td>
+            <td><div class="title-zh">Bayes-Sufficient Representations in Supervised Learning</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04647" target="_blank">2606.04647</a></td>
+            <td><div class="title-zh">ALINC: Active Learning for Inductive Node Classification via Graph Sampling</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04992" target="_blank">2606.04992</a></td>
+            <td><div class="title-zh">Multi-Camera AR Guidance System for Surgical Instrument Handling and Assembly: Investigating Workload and Efficiency</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.05152" target="_blank">2606.05152</a></td>
+            <td><div class="title-zh">Reinforcement Learning from Rich Feedback with Distributional DAgger</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.05104" target="_blank">2606.05104</a></td>
+            <td><div class="title-zh">Knowledge Index of Noah’s Ark</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04823" target="_blank">2606.04823</a></td>
+            <td><div class="title-zh">R-APS: Compositional Reasoning and In-Context Meta-Learning for Constrained Design via Reflective Adversarial Pareto Search</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04457" target="_blank">2606.04457</a></td>
+            <td><div class="title-zh">Imagine Before You Draw: Visual Prompt Engineering for Image Generation</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04736" target="_blank">2606.04736</a></td>
+            <td><div class="title-zh">Curvature-aware dynamic precision approach for physics-informed neural networks</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04888" target="_blank">2606.04888</a></td>
+            <td><div class="title-zh">HD-DinoMoE: A Class-Aware Hierarchical Dual Mixture-of-Experts Network for Scleral Anomaly Segmentation in Complex Acquisition Scenarios</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04145" target="_blank">2606.04145</a></td>
+            <td><div class="title-zh">EvalStop: Using World Feedback to Detect and Correct Reward Overoptimization in Multi-Tenant RLHF Platforms</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04300" target="_blank">2606.04300</a></td>
+            <td><div class="title-zh">Argus-Retriever: Vision-LLM Late-Interaction Retrieval with Region-Aware Query-Conditioned MoE for Visual Document Retrieval</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04396" target="_blank">2606.04396</a></td>
+            <td><div class="title-zh">Read the Trace, Steer the Path: Trajectory-Aware Reinforcement Learning for Diffusion Language Models</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04752" target="_blank">2606.04752</a></td>
+            <td><div class="title-zh">An Empirical Audit of Input Encoders for Multi-Channel Signal Transformers</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04650" target="_blank">2606.04650</a></td>
+            <td><div class="title-zh">Improving the Efficiency and Effectiveness of LLM Knowledge Distillation for Conversational Search</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04634" target="_blank">2606.04634</a></td>
+            <td><div class="title-zh">Explainably Safe Reinforcement Learning</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04402" target="_blank">2606.04402</a></td>
+            <td><div class="title-zh">Not All Errors Are Equal: Consequence-Aware Reasoning Compute Allocation</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.03943" target="_blank">2606.03943</a></td>
+            <td><div class="title-zh">PointAction: 3D Points as Universal Action Representations for Robot Control</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04111" target="_blank">2606.04111</a></td>
+            <td><div class="title-zh">AgenticDiffusion: Agentic Diffusion-based Path Planning for Vision-Based UAV Navigation</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04680" target="_blank">2606.04680</a></td>
+            <td><div class="title-zh">Read What You Hear: Reference-Free Hypotheses Evaluation with Acoustic Discrepancy</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04291" target="_blank">2606.04291</a></td>
+            <td><div class="title-zh">A Cookbook of 3D Vision: Data, Learning Paradigms, and Application</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04244" target="_blank">2606.04244</a></td>
+            <td><div class="title-zh">VAMPS: Visual-Assisted Mathematical Problem Solving Benchmark</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04806" target="_blank">2606.04806</a></td>
+            <td><div class="title-zh">NoRA: Evaluating Grounded Reasonableness in Visual First-person Normative Action Reasoning</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04454" target="_blank">2606.04454</a></td>
+            <td><div class="title-zh">Stepwise Reasoning Enhancement for LLMs via External Subgraph Generation</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04811" target="_blank">2606.04811</a></td>
+            <td><div class="title-zh">Dream.exe: Can Video Generation Models Dream Executable Robot Manipulation?</div></td>
+          </tr>
+
+          <tr>
+            <td><a class="arxiv-id link-btn" href="https://arxiv.org/pdf/2606.04708" target="_blank">2606.04708</a></td>
+            <td><div class="title-zh">VISTA: Vision-Grounded and Physics-Validated Adaptation of UMI data for VLA Training</div></td>
+          </tr>
+        </tbody>
+      </table>
+    </details>
+  </div>
+
+  <!-- 飞书失败 -->
+  <div class="section" style="background:#fef2f2">
+    <h2 style="border-left-color:#ef4444">✕ 飞书写入失败 (2 篇)</h2>
+    <table>
+      <thead><tr><th>arXiv</th><th>标题</th><th>错误信息</th></tr></thead>
+      <tbody>
+
+        <tr>
+          <td class="arxiv-id">2606.04701</td>
+          <td><div class="title-zh">在短视频平台上对生活屏幕原生图形用户界面代理进行基准测试</div></td>
+          <td><div class="error-box">飞书插入失败: code=1254045 msg=FieldNameNotFound</div></td>
+        </tr>
+
+        <tr>
+          <td class="arxiv-id">2606.04391</td>
+          <td><div class="title-zh">通过状态基础动态检索进行网络代理的在线技能学习</div></td>
+          <td><div class="error-box">飞书插入失败: code=1254045 msg=FieldNameNotFound</div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<script>
+const ctx = document.getElementById('kwChart').getContext('2d');
+new Chart(ctx, {
+  type: 'bar',
+  data: {
+    labels: ["GUI Agent", "Web Agent", "CUA", "computer use", "mobile agent", "GUI grounding", "Claw agent", "UI agent"],
+    datasets: [
+      {
+        label: '✓ 命中录入',
+        data: [1, 0, 0, 0, 0, 0, 0, 0],
+        backgroundColor: 'rgba(16, 185, 129, 0.85)',
+        borderRadius: 6,
+        stack: 's'
+      },
+      {
+        label: '⊘ 未命中过滤',
+        data: [60, 10, 0, 53, 0, 9, 0, 0],
+        backgroundColor: 'rgba(148, 163, 184, 0.65)',
+        borderRadius: 6,
+        stack: 's'
+      },
+      {
+        label: '↻ 历史去重',
+        data: [0, 61, 0, 8, 61, 5, 61, 61],
+        backgroundColor: 'rgba(99, 102, 241, 0.55)',
+        borderRadius: 6,
+        stack: 's'
+      },
+      {
+        label: '⌛ PDF 超时',
+        data: [0, 0, 0, 0, 0, 0, 0, 0],
+        backgroundColor: 'rgba(245, 158, 11, 0.85)',
+        borderRadius: 6,
+        stack: 's'
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      x: { stacked: true, grid: { display: false } },
+      y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } }
+    },
+    plugins: {
+      legend: { position: 'top', align: 'end' },
+      tooltip: { mode: 'index', intersect: false }
+    }
+  }
+});
+</script>
+</body>
+</html>
